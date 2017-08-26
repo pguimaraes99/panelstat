@@ -7,7 +7,7 @@ No attention has been given to formatting of outputs.
 
 `panelstat` is not in SSC. To install run the following in Stata:
 
-net install panelstat, from("https://github.com/pguimaraes99/panelstat/")
+net install panelstat, from("https://github.com/pguimaraes99/panelstat/raw/master/")
 
 ## Author
 
