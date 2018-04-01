@@ -1,3 +1,11 @@
+### Stata ###
 
+# Stata dataset and output files
 *.dta
+*.gph
+*.log
+*.smcl
+*.stpr
+*.stsem
+
 *.zip

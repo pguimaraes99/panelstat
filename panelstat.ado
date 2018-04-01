@@ -1,15 +1,15 @@
 *! version 3.03 3apr2017
-* Programmed by Paulo Guimaraes
+* Programmed by Paulo Guimarães
 * Dependencies:
 * option checkid requires installation of package group2hdfe (version 1.01 03jul2014)
 * option excel requires instalation of excelcol ( excelcol 1.0.0 19jul2014)
-* option pattern and tabovert require installation of sreshape 
+* option pattern and tabovert require installation of sreshape
 * option fast requires installation of ftools package (version 2.7.0 14feb2017 - development version)
 
-*---------------------------------------------------------*
-* Calculates descriptive statistics for panel data
-* Author: Paulo Guimaraes     
-*---------------------------------------------------------*
+*------------------------------------------------------------------------------*
+* Calculates descriptive statistics for panel data                             *
+* Author: Paulo Guimarães                                                      *
+*------------------------------------------------------------------------------*
 program define panelstat, rclass sortpreserve
 syntax varlist (min=2 max=2) [if] [in] , [ ///
 GAPS /// Analyzes data gaps
@@ -50,9 +50,9 @@ di
 version 13
 tokenize `varlist'
 
-********************************************************
+********************************************************************************
 * Additional checks on syntax
-********************************************************
+********************************************************************************
 
 * Check checkid syntax
 if `"`checkid'"' != "" {
@@ -61,7 +61,7 @@ if _rc>0 {
 di as err "Error: to use this option you need to install user-written package GROUP2HDFE"
 error 1
 }
-my_parse_option , option("`checkid'") 
+my_parse_option , option("`checkid'")
 * CHECKID only accepts one variable
 local checkid "`r(vars)'"
 local case : word count `checkid'
@@ -74,7 +74,7 @@ capture drop _check_`checkid'
 
 * Check demoby syntax
 if `"`demoby'"' != "" {
-my_parse_option , option("`demoby'") 
+my_parse_option , option("`demoby'")
 local demoby "`r(vars)'"
 local case : word count `demoby'
 if `case' >1 {
@@ -88,17 +88,17 @@ capture label define demobylab ///
 1 "1 first " ///
 2 "2 stayer" ///
 3 "3 mover " ///
-4 "4 return" 
+4 "4 return"
 }
 }
 
 * Check wiv syntax
 if `"`wiv'"' != "" {
-my_parse_option , option("`wiv'") 
+my_parse_option , option("`wiv'")
 local wiv "`r(vars)'"
 if "`r(keep)'"=="keep" {
 local keepwiv "keepwiv"
-foreach var of varlist `wiv' { 
+foreach var of varlist `wiv' {
 capture drop _wiv_`var'
 }
 }
@@ -112,11 +112,11 @@ capture label define wivlabel ///
 
 * Check wtv syntax and define labels
 if `"`wtv'"' != "" {
-my_parse_option , option("`wtv'") 
+my_parse_option , option("`wtv'")
 local wtv "`r(vars)'"
 if "`r(keep)'"=="keep" {
 local keepwtv "keepwtv"
-foreach var of varlist `wtv' { 
+foreach var of varlist `wtv' {
 capture drop _wtv_`var'
 }
 }
@@ -137,7 +137,7 @@ global sreshape "s"
 else {
 di "You may want to install user-written SRESHAPE for faster results"
 }
-my_parse_option , option("`tabovert'") 
+my_parse_option , option("`tabovert'")
 local tabovert "`r(vars)'"
 if "`r(keep)'"=="keep" {
 di "keep option ignored"
@@ -146,7 +146,7 @@ di "keep option ignored"
 
 * Check flows syntax
 if `"`flows'"' != "" {
-my_parse_option , option("`flows'") 
+my_parse_option , option("`flows'")
 local flows "`r(vars)'"
 if "`r(keep)'"=="keep" {
 di "keep option ignored"
@@ -155,11 +155,11 @@ di "keep option ignored"
 
 * Check trans syntax
 if `"`trans'"' != "" {
-my_parse_option , option("`trans'") 
+my_parse_option , option("`trans'")
 local trans "`r(vars)'"
 if "`r(keep)'"=="keep" {
 local keeptrans "keeptrans"
-foreach var of varlist `trans' { 
+foreach var of varlist `trans' {
 capture drop _trans_`var'
 }
 }
@@ -175,14 +175,14 @@ capture label define translabel ///
 * Check quantr syntax
 if `"`quantr'"' != "" {
 global ps_qtrel ""
-my_parse_option , option("`quantr'") 
+my_parse_option , option("`quantr'")
 local quantr "`r(vars)'"
 if "`r(rel)'"=="rel" {
 global ps_qtrel ", nofreq row"
 }
 if "`r(keep)'"=="keep" {
 local keepquantr "keepquantr"
-foreach var of varlist `quantr' { 
+foreach var of varlist `quantr' {
 capture drop _quantr_`var'
 }
 }
@@ -211,7 +211,7 @@ my_parse_option , option("`abs'")
 local abs "`r(vars)'"
 if "`r(keep)'"=="keep" {
 local keepabs "keepabs"
-foreach var of varlist `abs' { 
+foreach var of varlist `abs' {
 capture drop _abs_`var'
 }
 }
@@ -231,7 +231,7 @@ my_parse_option , option("`rel'")
 local rel "`r(vars)'"
 if "`r(keep)'"=="keep" {
 local keeprel "keeprel"
-foreach var of varlist `rel' { 
+foreach var of varlist `rel' {
 capture drop _rel_`var'
 }
 }
@@ -288,9 +288,9 @@ unab misvar: `miscode'*
 
 keep _ord `varlist' `wiv' `wtv' `tabovert' `flows' `checkid' `abs' `rel' `trans' `quantr'  `misvar' `demoby'
 
-**************************************
-* 
-**************************************
+********************************************************************************
+*
+********************************************************************************
 if "`nosum'"=="" {
 local basic basic
 }
@@ -301,11 +301,11 @@ local pattern pattern
 local demo demo
 }
 
-*******************
+********************************************************************************
 * Create panel vars
-*******************
+********************************************************************************
 tempvar i t
-qui gengroup `1' `i' 
+qui gengroup `1' `i'
 
 if "`cont'"=="cont" {
 tempvar yearst
@@ -315,7 +315,7 @@ drop `yearst'
 label var `t' "Time (cont)"
 }
 else {
-qui clonevar `t'=`2' 
+qui clonevar `t'=`2'
 }
 
 if "`excel'"!="" {
@@ -375,9 +375,9 @@ di in red "Invalid Panel: If you have repeated time values consider using option
 error 1
 }
 
-*****************************
+********************************************************************************
 * Create auxiliary variables
-*****************************
+********************************************************************************
 
 sort `i' `t'
 qui bys `i' (`t'): gen _nn=_n
@@ -388,7 +388,7 @@ label var _NN "Observ per individual"
 qui bys `i' (`t'): gen _dift=`t'-`t'[_n-1]-1
 qui replace _dift=0 if _nn==1
 label var _dift "Size of time gaps"
-if "`fast'"=="" { 
+if "`fast'"=="" {
 qui bys `i': egen _ngaps=total(_dift>0)
 }
 else {
@@ -399,13 +399,13 @@ bys `i' (`t'): gen _run=_n==1
 qui bys `i' (`t'): replace _run=_run[_n-1]+`t'-`t'[_n-1]-1 if _n>1
 * Note: Number of runs by individual = # gaps plus 1
 
-**************************
+********************************************************************************
 * Variables to retain
-**************************
+********************************************************************************
 tempfile temp1 temp2 temp3 temp4 temp5 temp6 temp7 temp8 temp9 temp10
 if "`keepmaxgap'"!=""|"`keepngaps'"!="" {
 if "`keepmaxgap'"!="" {
-if "`fast'"=="" { 
+if "`fast'"=="" {
 bys `i': egen int `keepmaxgap'=max(_dift)
 }
 else {
@@ -421,9 +421,9 @@ sort _ord
 qui save `temp1'
 }
 
-**************************
+********************************************************************************
 * Basic panel descriptives
-**************************
+********************************************************************************
 if "`basic'"=="basic" {
 basicdescriptives `i' `t' "`excel'"
 }
@@ -462,7 +462,7 @@ if "`abs'"!="" {
 checkabsval `i' `t' "`abs'"
 label values _abs_* chglabel
 local varabs ""
-foreach var of varlist `abs' { 
+foreach var of varlist `abs' {
 local varabs "`varabs' _abs_`var'"
 di
 di _dup(53) "*"
@@ -481,7 +481,7 @@ if "`rel'"!="" {
 checkrelval `i' `t' "`rel'"
 label values _rel_* chglabel
 local varrel ""
-foreach var of varlist `rel' { 
+foreach var of varlist `rel' {
 local varrel "`varrel' _rel_`var'"
 di
 di _dup(53) "*"
@@ -634,7 +634,7 @@ qui save `temp10'
 }
 
 
-**********************************************************************
+********************************************************************************
 
 if "`miscode'"!="" {
 local nmvars: word count `misvar'
@@ -655,7 +655,7 @@ drop _flag_cpr
 sort _ord
 qui save `temp8'
 }
-***********************************************************************
+********************************************************************************
 restore
 
 if "`keepmaxgap'"!=""|"`keepngaps'"!="" {
@@ -745,7 +745,7 @@ di _dup(53) "*"
 qui count if _dift>0
 if r(N)>0 {
 tempname col1 col2
-tab _dift if _dift>0, matrow(`col1') matcell(`col2')  
+tab _dift if _dift>0, matrow(`col1') matcell(`col2')
 if "`excel'"!="" {
 qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
 puttexttoexcel A1 "`fr'"
@@ -756,7 +756,7 @@ di _dup(53) "*"
 local fr "Distribution of the number of gaps by individual"
 di "`fr'"
 di _dup(53) "*"
-tab _ngaps if _nn==1, matrow(`col1') matcell(`col2')  
+tab _ngaps if _nn==1, matrow(`col1') matcell(`col2')
 if "`excel'"!="" {
 qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
 puttexttoexcel E1 "`fr'"
@@ -768,7 +768,7 @@ local fr "Size of time gap vs number of gaps per individual"
 di "`fr'"
 di _dup(53) "*"
 tempname mat1 mat2 mat3
-tab _dift _ngaps if _dift>0, matcol(`mat1') matrow(`mat2') matcell(`mat3') 
+tab _dift _ngaps if _dift>0, matcol(`mat1') matrow(`mat2') matcell(`mat3')
 if "`excel'"!="" {
 qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
 puttexttoexcel I1 "`fr'"
@@ -780,7 +780,7 @@ di _dup(53) "*"
 local fr "Observations per individual vs number of time gaps"
 di "`fr'"
 di _dup(53) "*"
-tab _NN _ngaps if _dift>0,  matcol(`mat1') matrow(`mat2') matcell(`mat3') 
+tab _NN _ngaps if _dift>0,  matcol(`mat1') matrow(`mat2') matcell(`mat3')
 if "`excel'"!="" {
 excelcol `pos'
 local col `r(column)'
@@ -827,7 +827,7 @@ by `i' (`t'): gen inc2=(`t'[_n+1]-`t'==1)
 gen exit=1-inc2
 by `i' (`t'): gen last=_n==_N
 gen reexit=exit-last
-if "`fast'"=="" { 
+if "`fast'"=="" {
 collapse (sum) total inc1 entry first reent inc2 exit last reexit, by(`t')
 }
 else {
@@ -838,7 +838,7 @@ di _dup(53) "*"
 local fr "Time changes - incumbents, entrants and exits"
 di "`fr'"
 di _dup(53) "*"
-list 
+list
 di "period - time period"
 di "total - total number of individuals at period t"
 di "inc1 - number of individuals at t that are also present at t-1"
@@ -892,7 +892,7 @@ capture recode _dum`ct' .=0
 qui capture replace Pattern=Pattern+string(_dum`ct')
 }
 }
-if "`fast'"=="" { 
+if "`fast'"=="" {
 contract Pattern
 rename _freq Frequency
 }
@@ -943,7 +943,7 @@ local fr "Distribution of complete runs by size"
 di "`fr'"
 di _dup(53) "*"
 tempname col1 col2
-tab N if n==1, matrow(`col1') matcell(`col2')  
+tab N if n==1, matrow(`col1') matcell(`col2')
 if "`excel'"!="" {
 qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
 puttexttoexcel A1 "`fr'"
@@ -983,7 +983,7 @@ tempfile temp9
 qui gen byte _demoby_`f'=first+2*stay+3*mover+4*return
 qui save `temp9', replace
 }
-if "`fast'"=="" { 
+if "`fast'"=="" {
 collapse (sum) total first last sing stay mover return, by(`t')
 }
 else {
@@ -994,7 +994,7 @@ di _dup(53) "*"
 local fr "Decomposition of changes across `f' over time "
 di "`fr'"
 di _dup(53) "*"
-list 
+list
 di "period - time period"
 di "total - total number of individuals at period t"
 di "first - number of individuals at t that show up for the first time"
@@ -1068,7 +1068,7 @@ putnumtoexcel B11 `avgperin'
 }
 local potmax=`ni'*(`tmax'-`tmin'+1)
 local share1=100*`totobs'/`potmax'
-di "The level of completeness is " %3.2f `share1' "%" "(100% is a fully balanced panel)" 
+di "The level of completeness is " %3.2f `share1' "%" "(100% is a fully balanced panel)"
 if "`excel'"!="" {
 puttexttoexcel A12 "Potential maximum # of cells"
 putnumtoexcel B12 `potmax'
@@ -1095,7 +1095,7 @@ puttexttoexcel A16 "Largest gap"
 putnumtoexcel B16 `larggap'
 }
 *di "Average run size is "
-*di "Largest run is " 
+*di "Largest run is "
 di
 di _dup(53) "*"
 local fr "Distribution of number of observations per individual"
@@ -1103,13 +1103,13 @@ local sheet "obsperind"
 di "`fr'"
 di _dup(53) "*"
 tempname col1 col2
-tab _NN if _nn==1, matrow(`col1') matcell(`col2')  
+tab _NN if _nn==1, matrow(`col1') matcell(`col2')
 if "`excel'"!="" {
 qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
 puttexttoexcel A1 "`fr'"
 puttabtoexcel 1 3 "#obs per ind" `col1' `col2' `sheet'
 }
-* 
+*
 di
 di _dup(53) "*"
 local fr "Number of individuals per time unit"
@@ -1145,7 +1145,7 @@ qui replace _check=3 if `di'==0&`dj'==1&`dmj'==0
 qui replace _check=4 if `di'==0&`dj'==0&`dmj'==0
 * Now handle missing values
 bys `group' (`var'): gen `allmi'=`var'[1]==.
-if "`fast'"=="" { 
+if "`fast'"=="" {
 bys `group': egen double `minv'=min(`var')
 bys `group': egen double `maxv'=max(`var')
 }
@@ -1166,7 +1166,7 @@ label define _checklabel ///
 5 "5 1:. all values missing for `var' " ///
 6 "6 1:.1 unique values of `var' with missing " ///
 7 "7 1:.m multiple values of `var' with missing " ///
-8 "8 m:. multiple values of id with missing " 
+8 "8 m:. multiple values of id with missing "
 label values _check _checklabel
 di _dup(53) "*"
 di "Checking if variable `var' can be id"
@@ -1248,7 +1248,7 @@ local mvar=r(N)
 local shmvar=`mvar'/`nind'*100
 drop `dum2'
 *
-if "`fast'"=="" { 
+if "`fast'"=="" {
 qui bys `dim': egen double `max'=max(`var')
 qui bys `dim': egen double `min'=min(`var')
 }
@@ -1326,7 +1326,7 @@ gen c_inc2=0
 qui replace c_inc2=`var'[_n-1] if inc1&missing(`var')
 gen c_entry=0
 qui replace c_entry=`var' if inc1==0
-if "`fast'"=="" { 
+if "`fast'"=="" {
 collapse (sum) `var' c_* , by(`t')
 }
 else {
@@ -1437,7 +1437,7 @@ args i t var1 var2
 tempvar chg1 chg2 sd1 sd2 maxsd
 bys `i': gen `chg1'=`var1'-l.`var1'
 bys `i': gen `chg2'=`var2'-l.`var2'
-if "`fast'"=="" { 
+if "`fast'"=="" {
 bys `i': egen `sd1'=sd(`var1')
 bys `i': egen `sd2'=sd(`var2')
 }
@@ -1524,22 +1524,22 @@ sort `v1'
 gen long `v2'=.
 if substr("`vtype'",1,3)=="str" {
 
-replace `v2'=1 in 1 if trim(`v1')!="" 
+replace `v2'=1 in 1 if trim(`v1')!=""
 replace `v2'=`v2'[_n-1]+(trim(`v1')!=trim(`v1'[_n-1])) if (trim(`v1')!=""&_n>1)
 }
 else {
-replace `v2'=1 in 1 if `v1'<. 
+replace `v2'=1 in 1 if `v1'<.
 replace `v2'=`v2'[_n-1]+(`v1'!=`v1'[_n-1]) if (`v1'<.&_n>1)
 }
 end
 
 program define my_parse_option, rclass
     syntax  [, option(string) ]
-        gettoken vars option: option, parse(", ")    
-        check_is_var `vars' 
+        gettoken vars option: option, parse(", ")
+        check_is_var `vars'
     local case : word count `option'
     while `case' > 0 {
-        gettoken left option: option, parse(", ")    
+        gettoken left option: option, parse(", ")
         if "`left'"=="," {
         local noption : word count `option'
         forval i=1/`noption' {
@@ -1564,4 +1564,3 @@ capture confirm variable `var'
      error 111
      }
 end
-
