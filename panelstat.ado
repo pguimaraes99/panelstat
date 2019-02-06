@@ -1,50 +1,81 @@
-*! version 3.03 3apr2017
+*! version 3.46 27nov2018
 * Programmed by Paulo Guimaraes
 * Dependencies:
 * option checkid requires installation of package group2hdfe (version 1.01 03jul2014)
-* option excel requires instalation of excelcol ( excelcol 1.0.0 19jul2014)
-* option pattern and tabovert require installation of sreshape 
-* option fast requires installation of ftools package (version 2.7.0 14feb2017 - development version)
+* option pattern and tabovert benefit from installation of sreshape or fastreshape
+* panelstat operates faster if gtools command is installed
+
+* Done
+* Improved syntax control (redid my_parse_option)
+* corrected some display options
+* dropped unnecessary variables
+* changed description on demo table
+* option excel - introduced replace and modify option (update helpfile)
+* option demoby was redone - it now breaks movers into first movers and return movers
+* option demoby includes missing option (update helpfile)
+* option demoby includes excel option (update helpfile)
+* corrected error that showed up when _merge existed on dataset
+* option abs includes now dif option (update helpfile)
+* option setnlags is now an option within each command
+* correct bug that did not allow keeping abs and rel variables simultaneously
+* option rel is calculated with denominator in absolute values
+* option rel includes now denlag to use the lag as the numerator
+* dropped fast option
+* reshape will use fastreshape or sreshape if available
+* whenever possible use gtools (gcollapse, gcontract and gegen)
+* option forcesreshape forces the use of sreshape
+* option forcestata forces the use of stata commands
+* option statovert was implemented
+* no longer uses excelcol
+* option fromto was added
+* option vars was added
+* wiv and wtv match vars (singleton categories added)
+* added zero option for statovert
+
+* to do
+* use r(tdelta) instead of "1"
+* delete miscode subcommand?
+* create an option for moregap information (module2a)
 
 *---------------------------------------------------------*
 * Calculates descriptive statistics for panel data
-* Author: Paulo Guimaraes     
+* Author: Paulo Guimaraes
 *---------------------------------------------------------*
 program define panelstat, rclass sortpreserve
 syntax varlist (min=2 max=2) [if] [in] , [ ///
 GAPS /// Analyzes data gaps
 RUNS /// Analyzes runs
 PATTERN /// /*  */
-DEMO /// /* demography*/
+DEMOG /// /* demography*/
+VARS /// /*basic descriptives for all variables*/
 CONT /// /* ignores gaps in the time variable*/
 NOSUM /// /* do not report summary of panel */
 SETMAXPAT(integer 10) /// /* Maximum number of patterns in the data */
-SETNLAGS(integer 1) /// /* number of lags used in lagging values for ABS and REL only!!! */
-SETABSV(integer 10) /// /* absolute value */
-SETRELV(integer 100) /// /* relative value */
 SETSDMIS(real 1) /// /* factor to apply to standard deviation on miscode  */
 SETLLMIS(real 10) /// /* lower limit to flag changes on miscode */
 SETDIFMIS(real 100) /// /*upper limit on the difference between the changes in the two variables compared with miscode  */
-SETQTLL(int 25) /// /* lower limit for calculation of 1st quantile in option QUANTR */
-SETQTUL(int 75) /// /* upper limit for calculation of last quantile in option QUANTR */
 EXCEL(string) /// /* output results to excel file*/
 KEEPMaxgap(string) /// /* variable contains the largest gap size for the individual*/
 KEEPNgaps(string) /// /* variable contains the number of gaps for the individual*/
 CHECKID(string) /// /* check whether variable can be used as an id */
-DEMOBY(string) /// /*calculates demo variables based on demoby  */
+DEMOBY(string) /// /* calculates demo variables based on demoby */
 ABS(string) /// /* check absolute change within i */
 REL(string) /// /* check relative change within i */
 WIV(string) /// /* Check consistency of variables constant within ID dimension */
 WTV(string) /// /* Check consistency of variables constant within TIME dimension */
 TABOVERT(string) /// /*Produces a tab of the variable with # of obs per category over time*/
+STATOVERT(string) /// /*Produces descriptive statistics of var over time*/
 FLOWS(string) /// /*Calculates the flows for the chosen variables*/
 TRANS(string) /// /*creates an indicator showing whether the transition probability is below some level*/
 QUANTR(string) /// /* calculates transitions between quantiles over time of a given variable*/
-MISCODE(string) /// /* requires a stub for list of variables. Checks for compensanting changes between pairs of variables */
+FROMTO(string) /// /*calculate a matrix with number of individuals that move from categories of var at t to s*/
+RETURN(string) /// /* Lists all cases where the variable returns to a previous value*/
 FORCE1 /// /* if there are repeated i by t makes it work by keeping only one i per t */
 FORCE2 /// /* drops all observations with repeated values by i x t */
+FORCE3 /// /* drops all observations for individuals that have repeated values of i x t */
+FORCESRESHAPE /// /* forces the use of sreshape */
+FORCESTATA /// /*forces the use of Stata commands*/
 ALL ///
-FAST /// uses latest version of ftools package version 2.7.0
 ]
 di
 version 13
@@ -55,220 +86,203 @@ tokenize `varlist'
 ********************************************************
 
 * Check checkid syntax
+
 if `"`checkid'"' != "" {
-capture which group2hdfe
-if _rc>0 {
-di as err "Error: to use this option you need to install user-written package GROUP2HDFE"
-error 1
-}
-my_parse_option , option("`checkid'") 
-* CHECKID only accepts one variable
+check_checkid `checkid'
 local checkid "`r(vars)'"
-local case : word count `checkid'
-if `case' >1 {
-di in red "Error: checkid only accepts one variable"
-error 111
+if "`r(keep)'"=="keep" {
+local keepcheckid "keepcheckid"
 }
-capture drop _check_`checkid'
 }
 
 * Check demoby syntax
 if `"`demoby'"' != "" {
-my_parse_option , option("`demoby'") 
+check_demoby `demoby'
 local demoby "`r(vars)'"
-local case : word count `demoby'
-if `case' >1 {
-di in red "Error: DEMOBY only accepts one variable"
-error 111
-}
 if "`r(keep)'"=="keep" {
 local keepdemoby "keepdemoby"
-capture drop _demoby_`demoby'
-capture label define demobylab ///
-1 "1 first " ///
-2 "2 stayer" ///
-3 "3 mover " ///
-4 "4 return" 
+}
+if "`r(missing)'"=="missing" {
+local missdemoby "missdemoby"
 }
 }
 
 * Check wiv syntax
 if `"`wiv'"' != "" {
-my_parse_option , option("`wiv'") 
+check_wiv `wiv'
 local wiv "`r(vars)'"
 if "`r(keep)'"=="keep" {
 local keepwiv "keepwiv"
-foreach var of varlist `wiv' { 
-capture drop _wiv_`var'
 }
-}
-capture label define wivlabel ///
-1 "1 complete time-invariant" ///
-2 "2 complete time-variant"   ///
-3 "3 complete missing"       ///
-4 "4 time-invariant with miss" ///
-5 "5 time-variant with miss"
 }
 
 * Check wtv syntax and define labels
 if `"`wtv'"' != "" {
-my_parse_option , option("`wtv'") 
+check_wtv `wtv'
 local wtv "`r(vars)'"
 if "`r(keep)'"=="keep" {
 local keepwtv "keepwtv"
-foreach var of varlist `wtv' { 
-capture drop _wtv_`var'
 }
-}
-capture label define wtvlabel ///
-1 "1 complete i-invariant" ///
-2 "2 complete i-variant"   ///
-3 "3 complete missing"       ///
-4 "4 i-invariant with miss" ///
-5 "5 i-variant with miss"
-}
-
-* Check tabovert syntax
-if `"`tabovert'"' != "" {
-capture which sreshape
-if _rc==0 {
-global sreshape "s"
-}
-else {
-di "You may want to install user-written SRESHAPE for faster results"
-}
-my_parse_option , option("`tabovert'") 
-local tabovert "`r(vars)'"
-if "`r(keep)'"=="keep" {
-di "keep option ignored"
-}
-}
-
-* Check flows syntax
-if `"`flows'"' != "" {
-my_parse_option , option("`flows'") 
-local flows "`r(vars)'"
-if "`r(keep)'"=="keep" {
-di "keep option ignored"
-}
-}
-
-* Check trans syntax
-if `"`trans'"' != "" {
-my_parse_option , option("`trans'") 
-local trans "`r(vars)'"
-if "`r(keep)'"=="keep" {
-local keeptrans "keeptrans"
-foreach var of varlist `trans' { 
-capture drop _trans_`var'
-}
-}
-capture label define translabel ///
-1 "1 p<5" ///
-2 "2 5<=p<25" ///
-3 "3 25<=p<75" ///
-4 "4 75<=p<95" ///
-5 "5 95<=p<100" ///
-6 "6 p=100"
-}
-
-* Check quantr syntax
-if `"`quantr'"' != "" {
-global ps_qtrel ""
-my_parse_option , option("`quantr'") 
-local quantr "`r(vars)'"
-if "`r(rel)'"=="rel" {
-global ps_qtrel ", nofreq row"
-}
-if "`r(keep)'"=="keep" {
-local keepquantr "keepquantr"
-foreach var of varlist `quantr' { 
-capture drop _quantr_`var'
-}
-}
-capture label define quantrlabel ///
-1 "1to1" ///
-2 "1to2" ///
-3 "1to3" ///
-4 "2to1" ///
-5 "2to2" ///
-6 "2to3" ///
-7 "3to1" ///
-8 "3to2" ///
-9 "3to3" ///
-10 "1to." ///
-11 "2to." ///
-12 "3to." ///
-13 ".to1" ///
-14 ".to2" ///
-15 ".to3" ///
-16 ".to."
 }
 
 * Check abs syntax
 if `"`abs'"' != "" {
-my_parse_option , option("`abs'")
+global ps_abst="S"
+check_abs `abs'
+global ps_nla=r(lags)
+global ps_absv=r(absv)
 local abs "`r(vars)'"
+if "`r(dif)'"=="dif" {
+global ps_abst="D"
+}
 if "`r(keep)'"=="keep" {
 local keepabs "keepabs"
-foreach var of varlist `abs' { 
-capture drop _abs_`var'
+foreach var of varlist `abs' {
+capture drop _abs_${ps_abst}${ps_nla}_`var'
 }
 }
-* Define labels
-capture label define chglabel ///
-1 "1 positive change" ///
-2 "2 negative change" ///
-3 "3 no change" ///
-4 "4 abnormal pos chg"  ///
-5 "5 abnormal neg chg"  ///
-6 "6 missing"
 }
 
 * Check rel syntax
 if `"`rel'"' != "" {
-my_parse_option , option("`rel'")
+global ps_denlag=1
+check_rel `rel'
+global ps_nlr=r(lags)
+global ps_relv=r(relv)
 local rel "`r(vars)'"
+if "`r(denlag)'"=="denlag" {
+global ps_denlag=0
+}
 if "`r(keep)'"=="keep" {
 local keeprel "keeprel"
-foreach var of varlist `rel' { 
-capture drop _rel_`var'
 }
-}
-* Define labels
-capture label define chglabel ///
-1 "1 positive change" ///
-2 "2 negative change" ///
-3 "3 no change" ///
-4 "4 abnormal pos chg"  ///
-5 "5 abnormal neg chg"  ///
-6 "6 missing"
 }
 
-* Check if t is numeric
-local vtype: type `2'
-if substr("`vtype'",1,3)=="str" {
-di in red "Error: `2' must be numeric! "
-error 198
+* Check tabovert syntax
+if `"`tabovert'"' != "" {
+check_tabovert `tabovert'
+local tabovert "`r(vars)'"
 }
 
-* Check for reasonable values of parameters
-if `setqtul'>100 {
-di "Parameter may not exceed 100"
-error 111
+* Check statovert syntax
+if `"`statovert'"' != "" {
+check_statovert `statovert'
+local statovert "`r(vars)'"
 }
 
-* Set Parameters
+* Check flows syntax
+if `"`flows'"' != "" {
+check_flows `flows'
+local flows "`r(vars)'"
+}
+
+* Check trans syntax
+if `"`trans'"' != "" {
+check_trans `trans'
+local trans "`r(vars)'"
+if "`r(keep)'"=="keep" {
+local keeptrans "keeptrans"
+foreach var of varlist `trans' {
+capture drop _trans_`var'
+}
+}
+}
+
+* Check quantr syntax
+if `"`quantr'"' != "" {
+check_quantr `quantr'
+global ps_qtrel ""
+global ps_qtmiss "if _tokeep<10 "
+local quantr "`r(vars)'"
+if "`r(rel)'"=="rel" {
+global ps_qtrel ", nofreq row"
+}
+if "`r(missing)'"=="missing" {
+global ps_qtmiss " "
+}
+if "`r(keep)'"=="keep" {
+local keepquantr "keepquantr"
+}
+}
+
+* Check fromto syntax
+if `"`fromto'"' != "" {
+check_fromto `fromto'
+local fromto "`r(vars)'"
+local fromtoval1=r(fromval)
+local fromtoval2=r(toval)
+}
+
+* Check return syntax
+if `"`return'"' != "" {
+check_return `return'
+local return "`r(vars)'"
+local returnval1=r(val1)
+local returnval2=r(val2)
+local returnval3=r(val3)
+}
+
+* Check if faster user-written ados installed
+* reshape
+*if "`tabovert'"!="" | "`pattern'"!=""  {
+capture which sreshape
+if _rc==0 {
+local sreshapeexists=1
+global ps_reshape "s"
+}
+capture which fastreshape
+if _rc==0 {
+global ps_reshape "fast"
+}
+if "$ps_reshape"=="" {
+di "You may want to install user-written SRESHAPE or FASTRESHAPE for faster results"
+}
+*}
+
+if "`forcesreshape'"=="forcesreshape" {
+if `sreshapeexists' {
+global ps_reshape "s"
+}
+else {
+di "sreshape is not installed"
+}
+}
+
+* gtools
+capture which gtools
+if _rc==0 {
+global ps_gtools "g"
+}
+if "$ps_gtools"=="" {
+di "You may want to install user-written GTOOLS for faster results"
+}
+
+if "`forcestata'"=="forcestata" {
+global ps_reshape ""
+global ps_gtools ""
+}
+
+* Set other Parameters
 global ps_maxpat=`setmaxpat'
-global ps_nlags=`setnlags'
-global ps_absv=`setabsv'
-global ps_relv=`setrelv'
 global ps_llmis=`setllmis'
 global ps_difmis=`setdifmis'
 global ps_sdmis=`setsdmis'
-global ps_qtll=`setqtll'
-global ps_qtul=`setqtul'
 
+if "`miscode'"!="" {
+unab misvar: `miscode'*
+}
+
+if "`nosum'"=="" {
+local basic basic
+}
+
+if "`all'"!="" {
+local gaps gaps
+local runs runs
+local pattern pattern
+local demog demog
+local vars vars
+}
 
 * Cleanup
 capture drop _ord
@@ -281,31 +295,12 @@ preserve
 tempvar touse
 mark `touse' `if' `in'
 qui keep if `touse'
-tokenize `varlist'
-if "`miscode'"!="" {
-unab misvar: `miscode'*
-}
-
-keep _ord `varlist' `wiv' `wtv' `tabovert' `flows' `checkid' `abs' `rel' `trans' `quantr'  `misvar' `demoby'
-
-**************************************
-* 
-**************************************
-if "`nosum'"=="" {
-local basic basic
-}
-if "`all'"!="" {
-local gaps gaps
-local runs runs
-local pattern pattern
-local demo demo
-}
 
 *******************
 * Create panel vars
 *******************
 tempvar i t
-qui gengroup `1' `i' 
+qui gengroup `1' `i'
 
 if "`cont'"=="cont" {
 tempvar yearst
@@ -315,35 +310,32 @@ drop `yearst'
 label var `t' "Time (cont)"
 }
 else {
-qui clonevar `t'=`2' 
+qui clonevar `t'=`2'
+label var `t' "Time"
 }
 
 if "`excel'"!="" {
-capture which excelcol
-if _rc>0 {
-di as err "Error: to use this option you need to install user-written package EXCELCOL"
-error 1
+putexcel clear
+gettoken excelfile option: excel, parse(", ")
+gettoken left option: option, parse(", ")
+if fileexists("`excelfile'.xlsx") {
+if "`left'"==","&trim("`option'")=="replace" {
+local replace replace
+qui putexcel set "`excelfile'.xlsx", replace
+putexcel a1=("")
+}
+if "`left'"==","&trim("`option'")=="modify" {
+local modify modify
+}
+if ("`replace'"=="")&("`modify'"=="") {
+di as err "Error: file `excelfile'.xlsx already exists. To rewrite specify the replace option "
+error 602
 }
 }
-
-if "`pattern'"!="" {
-capture which sreshape
-if _rc==0 {
-global sreshape "s"
 }
 else {
-di "You may want to install user-written SRESHAPE for faster results"
+qui putexcel set "`excelfile'.xlsx"
 }
-}
-
-if "`fast'"!="" {
-capture which ftools
-if _rc>0 {
-di as err "Error: to use this option you need to install user-written package FTOOLS version 2.7.0 or above"
-error 1
-}
-}
-
 
 
 if "`force1'"=="force1" {
@@ -352,7 +344,7 @@ tempvar dumnn
 bys `i' `t': gen int `dumnn'=_n
 qui count if `dumnn'>1
 if r(N)>0 {
-di in red "Warning: dropping " r(N) " observation(s) to ensure unique values per `1' x `2' pair"
+di as error "Warning: ignoring " r(N) " observation(s) to ensure unique values per `1' x `2' pair"
 qui keep if `dumnn'==1
 }
 drop `dumnn'
@@ -363,15 +355,56 @@ di
 tempvar dumNN
 bys `i' `t': gen int `dumNN'=_N
 qui count if `dumNN'>1
-di in red "Warning: dropping " r(N) " observation(s) with multiple values per `1' x `2' pair"
+if r(N)>0 {
+di as error "Warning: ignoring " r(N) " observation(s) with multiple values per `1' x `2' pair"
 qui keep if `dumNN'==1
+}
 drop `dumNN'
 }
+
+if "`force3'"=="force3" {
+di
+tempvar dumNN dumN ni 
+bys `i' `t': gen int `dumNN'=_N
+bys `i': egen `dumN'=total(`dumNN'>1)
+egen `ni'=tag(`i')
+qui count if `dumN'>0&`ni'==1
+local nni=r(N)
+qui count if `dumN'>0
+if r(N)>0 {
+di as error "Warning: ignoring all " r(N) " observation(s) of `nni' panel unit(s) that have multiple values per `1' x `2' pair"
+qui keep if `dumNN'==1
+}
+drop `dumNN'
+drop `dumN'
+drop `ni'
+}
+
+if "`vars'"!="" {
+qui ds
+local allvars "`r(varlist)'"
+unab temps: __*
+local vars1: list allvars - temps
+local ord "_ord `i' `t' `v1' `v2'"
+local vars2: list vars1 - ord
+foreach var of varlist `vars2' {
+local vtype: type `var'
+if substr("`vtype'",1,3)!="str" {
+local vars3 "`vars3' `var'"
+}
+}
+}
+
+keep _ord `i' `t' `varlist' `wiv' `wtv' `tabovert' `statovert' `flows' `checkid' `abs' `rel' ///
+`trans' `quantr' `misvar' `demoby' `fromto' `return' `vars3'
 
 xtset, clear
 capture xtset `i' `t'
 if _rc>0 {
-di in red "Invalid Panel: If you have repeated time values consider using option force1 or force2 "
+tempvar dumNN
+bys `i' `t': gen int `dumNN'=_N
+di as error "Invalid Panel: If you have repeated time values consider using option force1, force2, or force3 "
+flist `varlist' if `dumNN'>1
 error 1
 }
 
@@ -382,18 +415,11 @@ error 1
 sort `i' `t'
 qui bys `i' (`t'): gen _nn=_n
 qui bys `i' (`t'): gen _NN=_N
-qui bys `t' (`i'): gen _tt=_n
-qui bys `t' (`i'): gen _TT=_N
 label var _NN "Observ per individual"
 qui bys `i' (`t'): gen _dift=`t'-`t'[_n-1]-1
 qui replace _dift=0 if _nn==1
 label var _dift "Size of time gaps"
-if "`fast'"=="" { 
-qui bys `i': egen _ngaps=total(_dift>0)
-}
-else {
-fcollapse (sum) _ngaps=_dift, by(`i') merge
-}
+qui bys `i': ${ps_gtools}egen _ngaps=total(_dift>0)
 label var _ngaps "Number of gaps per individual"
 bys `i' (`t'): gen _run=_n==1
 qui bys `i' (`t'): replace _run=_run[_n-1]+`t'-`t'[_n-1]-1 if _n>1
@@ -402,17 +428,12 @@ qui bys `i' (`t'): replace _run=_run[_n-1]+`t'-`t'[_n-1]-1 if _n>1
 **************************
 * Variables to retain
 **************************
-tempfile temp1 temp2 temp3 temp4 temp5 temp6 temp7 temp8 temp9 temp10
+tempfile temp1 temp2 temp3 temp4 temp5 temp6 temp7 temp8 temp9 temp10 temp11 temp12
 if "`keepmaxgap'"!=""|"`keepngaps'"!="" {
 if "`keepmaxgap'"!="" {
-if "`fast'"=="" { 
-bys `i': egen int `keepmaxgap'=max(_dift)
-}
-else {
-fcollapse (max) `keepmaxgap'=_dift, by(`i') merge
-}
-}
+bys `i':  ${ps_gtools}egen int `keepmaxgap'=max(_dift)
 label var `keepmaxgap' "Maximum number of gaps"
+}
 if "`keepngaps'"!="" {
 gen int `keepngaps'=_ngaps
 label var `keepngaps' "Number of gaps"
@@ -425,31 +446,27 @@ qui save `temp1'
 * Basic panel descriptives
 **************************
 if "`basic'"=="basic" {
-basicdescriptives `i' `t' "`excel'"
+basicdescriptives `i' `t' "`excelfile'"
 }
 
 if "`gaps'"=="gaps" {
-module2 `i' `t' "`excel'"
+module2 `i' `t' "`excelfile'"
 }
 
 if "`runs'"=="runs" {
-module5 `i' `t' "`excel'"
+module5 `i' `t' "`excelfile'"
 }
 
-if "`demo'"=="demo" {
-module3 `i' `t' "`excel'"
-}
-
-if "`demoby'"!="" {
-module7 `i' `t' `demoby' `keepdemoby'
-if "`keepdemoby'"!="" {
-sort _ord
-qui save `temp9'
-}
+if "`demog'"=="demog" {
+module3 `i' `t' "`excelfile'"
 }
 
 if "`pattern'"=="pattern" {
-module4 `i' `t' "`excel'"
+module4 `i' `t' "`excelfile'"
+}
+
+if "`vars'"!="" {
+varstats `i' _nn _NN "`vars3'" "`excelfile'"
 }
 
 if "`checkid'"!="" {
@@ -458,49 +475,18 @@ sort _ord
 qui save `temp4'
 }
 
-if "`abs'"!="" {
-checkabsval `i' `t' "`abs'"
-label values _abs_* chglabel
-local varabs ""
-foreach var of varlist `abs' { 
-local varabs "`varabs' _abs_`var'"
-di
-di _dup(53) "*"
-di "Absolute changes over time for `var' (absv set to $ps_absv)"
-di _dup(53) "*"
-tab _abs_`var'
-di
-}
-if "`keepabs'"!="" {
+if "`demoby'"!="" {
+module7 `i' `t' `demoby' "`keepdemoby'" "`missdemoby'" "`excelfile'"
+if "`keepdemoby'"!="" {
 sort _ord
-qui save `temp5'
-}
-}
-
-if "`rel'"!="" {
-checkrelval `i' `t' "`rel'"
-label values _rel_* chglabel
-local varrel ""
-foreach var of varlist `rel' { 
-local varrel "`varrel' _rel_`var'"
-di
-di _dup(53) "*"
-di "Relative changes over time for `var' (relv set to $ps_relv)"
-di _dup(53) "*"
-tab _rel_`var'
-di "Note: Relative change is calculated relative to the average of x_{t} and x_{t-1}"
-di
-}
-if "`keeprel'"!="" {
-sort _ord
-qui save `temp6'
+qui save `temp9'
 }
 }
 
 if "`wiv'"!="" {
 local fr "Analysis of wiv variables"
-if "`excel'"!="" {
-qui putexcel set "`excel'.xlsx", sheet("wiv") modify
+if "`excelfile'"!="" {
+qui putexcel set "`excelfile'.xlsx", sheet("wiv") modify
 puttexttoexcel A1 "`fr'"
 puttexttoexcel A4 "Total # Obs"
 puttexttoexcel A5 "Nonmissing Obs"
@@ -508,20 +494,25 @@ puttexttoexcel A6 " % nonmissing"
 puttexttoexcel A8 " Minimum value"
 puttexttoexcel A9 " Maximum value"
 puttexttoexcel A11 "Total i-Obs"
-puttexttoexcel A12 "Invariant no missing"
-puttexttoexcel A13 "Variant no missing"
-puttexttoexcel A14 "Complete missing"
-puttexttoexcel A15 "Invariant with missing"
-puttexttoexcel A16 "Variant with missing"
+puttexttoexcel A12 "singleton non-missing"
+puttexttoexcel A13 "singleton missing"
+puttexttoexcel A14 "non-singleton all missing"
+puttexttoexcel A15 "non-singleton one valid value"
+puttexttoexcel A16 "non-singleton time invariant without missing"
+puttexttoexcel A17 "non-singleton time invariant with missing"
+puttexttoexcel A18 "non-singleton time variant without missing"
+puttexttoexcel A19 "non-singleton time variant with missing"
 }
 local varwiv ""
 local col=3
 foreach var of varlist `wiv' {
 di _dup(53) "*"
-checkvar _nn `i' "`var'" "`1'" `col' "`excel'"
-*capture drop _wiv_`var'
+checkvar _nn _NN `i' "`var'" "`1'" "`2'" `col' "`excelfile'"
 rename _w_ _wiv_`var'
-label values _wiv_`var' wivlabel
+label values _wiv_`var' _wivlabel
+di
+di "Distribution of all observations for `var'"
+di
 tab _wiv_`var'
 if "`keepwiv'"!="" {
 local varwiv `varwiv' _wiv_`var'
@@ -536,8 +527,8 @@ qui save `temp2'
 
 if "`wtv'"!="" {
 local fr "Analysis of wtv variables"
-if "`excel'"!="" {
-qui putexcel set "`excel'.xlsx", sheet("wtv") modify
+if "`excelfile'"!="" {
+qui putexcel set "`excelfile'.xlsx", sheet("wtv") modify
 puttexttoexcel A1 "`fr'"
 puttexttoexcel A4 "Total # Obs"
 puttexttoexcel A5 "Nonmissing Obs"
@@ -545,20 +536,27 @@ puttexttoexcel A6 " % nonmissing"
 puttexttoexcel A8 " Minimum value"
 puttexttoexcel A9 " Maximum value"
 puttexttoexcel A11 "Total t-Obs"
-puttexttoexcel A12 "Invariant no missing"
-puttexttoexcel A13 "Variant no missing"
-puttexttoexcel A14 "Complete missing"
-puttexttoexcel A15 "Invariant with missing"
-puttexttoexcel A16 "Variant with missing"
+puttexttoexcel A12 "t-singleton non-missing"
+puttexttoexcel A13 "t-singleton missing"
+puttexttoexcel A14 "non-singleton all missing"
+puttexttoexcel A15 "non-singleton one valid value"
+puttexttoexcel A16 "non-singleton panel invariant without missing"
+puttexttoexcel A17 "non-singleton panel invariant with missing"
+puttexttoexcel A18 "non-singleton panel variant without missing"
+puttexttoexcel A19 "non-singleton panel variant with missing"
 }
 local varwtv ""
 local col=3
+qui bys `t' (`i'): gen _tt=_n
+qui bys `t' (`i'): gen _TT=_N
 foreach var of varlist `wtv' {
 di _dup(53) "*"
-checkvar _tt `t' "`var'" "`2'" `col' "`excel'"
-*capture drop _wtv_`var'
+checkvar _tt _TT `t' "`var'" "`2'" "`1'" `col' "`excelfile'"
 rename _w_ _wtv_`var'
-label values _wtv_`var' wtvlabel
+label values _wtv_`var' _wtvlabel
+di
+di "Distribution of all observations for `var'"
+di
 tab _wtv_`var'
 if "`keepwtv'"!="" {
 local varwtv `varwtv' _wtv_`var'
@@ -571,9 +569,56 @@ qui save `temp3'
 }
 }
 
+if "`abs'"!="" {
+checkabsval `i' `t' "`abs'"
+label values _abs_* _chglabel
+local varabs ""
+foreach var of varlist `abs' {
+local varabs "`varabs' _abs_${ps_abst}${ps_nla}_`var'"
+di
+di _dup(53) "*"
+di "Absolute changes over time for `var' (threshold set to $ps_absv)"
+di _dup(53) "*"
+tab _abs_${ps_abst}${ps_nla}_`var'
+di
+}
+if "`keepabs'"!="" {
+sort _ord
+qui save `temp5'
+}
+}
+
+if "`rel'"!="" {
+checkrelval `i' `t' "`rel'"
+label values _rel_* _chglabel
+local varrel ""
+foreach var of varlist `rel' {
+local varrel "`varrel' _rel_L${ps_nlr}_`var'"
+di
+di _dup(53) "*"
+di "Relative changes over time for `var' (threshold set to $ps_relv)"
+di _dup(53) "*"
+tab _rel_L${ps_nlr}_`var'
+di
+if $ps_denlag {
+di "Note: Relative change is calculated with respect to the average of x_{t} and x_{t-1}"
+}
+}
+if "`keeprel'"!="" {
+sort _ord
+qui save `temp6'
+}
+}
+
 if "`tabovert'"!="" {
 foreach var of varlist `tabovert' {
-tabover `t' "`var'" "`excel'"
+tabover `t' "`var'" "`excelfile'"
+}
+}
+
+if "`statovert'"!="" {
+foreach var of varlist `statovert' {
+statover `t' "`var'" "`excelfile'"
 }
 }
 
@@ -583,10 +628,10 @@ di _dup(53) "*"
 local fr "Time flows for variable `var'"
 di "`fr'"
 di _dup(53) "*"
-if "`excel'"!="" {
-qui putexcel set "`excel'.xlsx", sheet("fl_`var'") modify
+if "`excelfile'"!="" {
+qui putexcel set "`excelfile'.xlsx", sheet("fl_`var'") modify
 }
-calcflow `i' `t' "`var'" "`excel'"
+calcflow `i' `t' "`var'" "`excelfile'"
 }
 }
 
@@ -612,29 +657,45 @@ di
 local varquantr ""
 foreach var of varlist `quantr' {
 di _dup(53) "*"
-local fr "changes (t-1 to t) in the quantiles of `var'"
+local fr "changes (t-1 to t) in the quartiles of `var'"
 di "`fr'"
 di _dup(53) "*"
 calcquantr `i' `t' "`var'"
 if "`keepquantr'"!="" {
-*capture drop _quantr_`var'
 local varquantr `varquantr' _quantr_`var'
-di "`varquantr'"
 rename _tokeep_ _quantr_`var'
 }
 }
 di "Notes:"
-di " quantile 1 defined as values below $ps_qtll  "
-di " quantile 2 defined as values above $ps_qtll and below $ps_qtul "
-di " quantile 3 defined as values above $ps_qtul  "
+di " quartile 1 defined as values below $ps_qtll  "
+di " quartile 2 defined as values above $ps_qtll and below $ps_qtul "
+di " quartile 3 defined as values above $ps_qtul  "
 if "`keepquantr'"!="" {
 sort _ord
 qui save `temp10'
 }
 }
 
+if "`fromto'"!="" {
+check_valid_time `2' `fromtoval1'
+check_valid_time `2' `fromtoval2'
+fromto `i' `2' `fromto' `fromtoval1' `fromtoval2' "`excelfile'"
+if ${ps_ftkeep} {
+sort _ord
+qui save `temp12'
+}
+}
 
-**********************************************************************
+if "`return'"!="" {
+check_valid_time `2' `returnval1'
+check_valid_time `2' `returnval2'
+check_valid_time `2' `returnval3'
+returnto `i' `2' `return' `returnval1' `returnval2' `returnval3' "`excelfile'"
+if ${ps_rtkeep} {
+sort _ord
+qui save `temp11'
+}
+}
 
 if "`miscode'"!="" {
 local nmvars: word count `misvar'
@@ -658,45 +719,47 @@ qui save `temp8'
 ***********************************************************************
 restore
 
+tempvar mergevar
+
 if "`keepmaxgap'"!=""|"`keepngaps'"!="" {
 sort _ord
-qui merge 1:1 _ord using `temp1', keepusing(`keepmaxgap' `keepngaps')
-drop _merge
+qui merge 1:1 _ord using `temp1', keepusing(`keepmaxgap' `keepngaps') generate(`mergevar')
+drop `mergevar'
 }
 
 if "`keepwiv'"!=""&"`wiv'"!="" {
-qui merge 1:1 _ord using `temp2', keepusing(`varwiv')
-drop _merge
+qui merge 1:1 _ord using `temp2', keepusing(`varwiv') generate(`mergevar')
+drop `mergevar'
 }
 
 if "`keepwtv'"!=""&"`wtv'"!=""{
-qui merge 1:1 _ord using `temp3', keepusing(`varwtv')
-drop _merge
+qui merge 1:1 _ord using `temp3', keepusing(`varwtv') generate(`mergevar')
+drop `mergevar'
 }
 
-if "`checkid'"!="" {
-qui merge 1:1 _ord using `temp4', keepusing(_check)
-drop _merge
+if "`checkid'"!=""&"`keepcheckid'"!="" {
+qui merge 1:1 _ord using `temp4', keepusing(_check) generate(`mergevar')
+drop `mergevar'
 }
 
 if "`abs'"!=""&"`keepabs'"!="" {
-qui merge 1:1 _ord using `temp5', keepusing(`varabs')
-drop _merge
+qui merge 1:1 _ord using `temp5', keepusing(`varabs') generate(`mergevar')
+drop `mergevar'
 }
 
 if "`rel'"!=""&"`keeprel'"!="" {
-qui merge 1:1 _ord using `temp6', keepusing(`varrel')
-drop _merge
+qui merge 1:1 _ord using `temp6', keepusing(`varrel') generate(`mergevar')
+drop `mergevar'
 }
 
 if "`trans'"!=""&"`keeptrans'"!="" {
-qui merge 1:1 _ord using `temp7', keepusing(`vartrans')
-drop _merge
+qui merge 1:1 _ord using `temp7', keepusing(`vartrans') generate(`mergevar')
+drop `mergevar'
 }
 
 if "`miscode'"!="" {
-capture merge 1:1 _ord using `temp8', keepusing(_flag_*)
-capture drop _merge
+capture merge 1:1 _ord using `temp8', keepusing(_flag_*) generate(`mergevar')
+capture drop `mergevar'
 di
 di _dup(53) "*"
 di "Checking for miscoding on `miscode'"
@@ -715,9 +778,12 @@ tabstat _flag_*, statistics(sum) columns(statistics) longstub
 }
 
 if "`demoby'"!=""&"`keepdemoby'"!="" {
-qui merge 1:1 _ord using `temp9', keepusing(_demoby_`demoby')
-drop _merge
-label values _demoby_`demoby' demobylab
+qui merge 1:1 _ord using `temp9', keepusing(_demoby_`demoby') generate(`mergevar')
+drop `mergevar'
+if "`missdemoby'"!="" {
+qui recode _demoby_`demoby' (.=5)
+}
+label values _demoby_`demoby' _demobylab
 di
 di _dup(53) "*"
 di "Distribution of _demoby_`demoby' is: "
@@ -726,14 +792,33 @@ tab _demoby_`demoby'
 }
 
 if "`quantr'"!=""&"`keepquantr'"!="" {
-qui merge 1:1 _ord using `temp10', keepusing(`varquantr')
-drop _merge
+qui merge 1:1 _ord using `temp10', keepusing(`varquantr') generate(`mergevar')
+drop `mergevar'
 }
 
+
+if "`return'"!=""&${ps_rtkeep} {
+capture drop _ret_`return'_`returnval1'_`returnval3'
+qui merge 1:1 _ord using `temp11', keepusing(_ret_`return'_`returnval1'_`returnval3') generate(`mergevar')
+capture label drop _flag
+label define _flag ///
+0 "0 not flagged " ///
+1 "1 flagged "
+label values _ret_`return'_`returnval1'_`returnval3' _flag
+}
+
+if "`fromto'"!=""&${ps_ftkeep} {
+capture drop _ft_`fromto'_`fromtoval1'_`fromtoval2'
+qui merge 1:1 _ord using `temp12', keepusing(_ft_`fromto'_`fromtoval1'_`fromtoval2') generate(`mergevar')
+}
+
+* Cleaning up!
 capture drop _ord
+global drop ps_*
 end
 
-program define module2
+
+program define module2a
 args i t excel
 preserve
 keep `i' `t' _nn _NN _dift _ngaps
@@ -745,7 +830,7 @@ di _dup(53) "*"
 qui count if _dift>0
 if r(N)>0 {
 tempname col1 col2
-tab _dift if _dift>0, matrow(`col1') matcell(`col2')  
+tab _dift if _dift>0, matrow(`col1') matcell(`col2')
 if "`excel'"!="" {
 qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
 puttexttoexcel A1 "`fr'"
@@ -756,7 +841,7 @@ di _dup(53) "*"
 local fr "Distribution of the number of gaps by individual"
 di "`fr'"
 di _dup(53) "*"
-tab _ngaps if _nn==1, matrow(`col1') matcell(`col2')  
+tab _ngaps if _nn==1, matrow(`col1') matcell(`col2')
 if "`excel'"!="" {
 qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
 puttexttoexcel E1 "`fr'"
@@ -768,7 +853,7 @@ local fr "Size of time gap vs number of gaps per individual"
 di "`fr'"
 di _dup(53) "*"
 tempname mat1 mat2 mat3
-tab _dift _ngaps if _dift>0, matcol(`mat1') matrow(`mat2') matcell(`mat3') 
+tab _dift _ngaps if _dift>0, matcol(`mat1') matrow(`mat2') matcell(`mat3')
 if "`excel'"!="" {
 qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
 puttexttoexcel I1 "`fr'"
@@ -780,7 +865,7 @@ di _dup(53) "*"
 local fr "Observations per individual vs number of time gaps"
 di "`fr'"
 di _dup(53) "*"
-tab _NN _ngaps if _dift>0,  matcol(`mat1') matrow(`mat2') matcell(`mat3') 
+tab _NN _ngaps if _dift>0,  matcol(`mat1') matrow(`mat2') matcell(`mat3')
 if "`excel'"!="" {
 excelcol `pos'
 local col `r(column)'
@@ -811,10 +896,50 @@ di
 restore
 end
 
+program define module2
+args i t excel
+preserve
+keep `i' `t' _nn _NN _dift _ngaps
+local sheet "gaps"
+di _dup(53) "*"
+local fr "Distribution of the size of the time gaps"
+di "`fr'"
+di _dup(53) "*"
+qui count if _dift>0
+if r(N)>0 {
+tempname col1 col2
+tab _dift if _dift>0, matrow(`col1') matcell(`col2')
+if "`excel'"!="" {
+qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
+puttexttoexcel A1 "`fr'"
+puttabtoexcel 1 3 "Size of time gaps" `col1' `col2' `sheet'
+}
+di
+di _dup(53) "*"
+local fr "Distribution of the number of gaps by individual"
+di "`fr'"
+di _dup(53) "*"
+tab _ngaps if _nn==1, matrow(`col1') matcell(`col2')
+if "`excel'"!="" {
+qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
+puttexttoexcel E1 "`fr'"
+puttabtoexcel 5 3 "Size of time gaps" `col1' `col2' `sheet'
+}
+di
+}
+else {
+di
+di "There are no time gaps"
+di
+}
+restore
+end
+
+
 program define module3
 args i t excel
 preserve
-local sheet "demo"
+local sheet "demog"
 keep `i' `t'
 sort `i' `t'
 gen total=1
@@ -826,34 +951,36 @@ gen reent=ent-first
 by `i' (`t'): gen inc2=(`t'[_n+1]-`t'==1)
 gen exit=1-inc2
 by `i' (`t'): gen last=_n==_N
-gen reexit=exit-last
-if "`fast'"=="" { 
-collapse (sum) total inc1 entry first reent inc2 exit last reexit, by(`t')
-}
-else {
-fcollapse (sum) total inc1 entry first reent inc2 exit last reexit, by(`t')
-}
-rename `t' period
+gen reex=exit-last
+${ps_gtools}collapse (sum) total inc1 entry first reent inc2 exit last reex, by(`t') fast
+rename `t' time
 di _dup(53) "*"
 local fr "Time changes - incumbents, entrants and exits"
 di "`fr'"
 di _dup(53) "*"
-list 
-di "period - time period"
-di "total - total number of individuals at period t"
-di "inc1 - number of individuals at t that are also present at t-1"
-di "entry - number of individuals at t that are not present at t-1"
+list, noobs
+di "time - time period"
+di "total - total number of individuals at time t "
+di "inc1 - number of individuals at t that are also present at t-1 "
+di "entry - number of individuals at t that are not present at t-1 "
 di "first - number of individuals at t who show up for the first time at t"
-di "reent - number of individuals at t that are reentering at period t"
-di "inc2 - number of individuals at t that are also present at t+1"
-di "exit - number of individuals at t that are not present at t+1"
-di "last - number of individuals at t that are not present at any future period"
-di "reexit - number of individuals at t that are not present at t+1 but appear in later periods"
+di "reent - number of individuals at t that are reentering at time t"
+di "inc2 - number of individuals at t that are also present at t+1 "
+di "exit - number of individuals at t that are not present at t+1 "
+di "last - number of individuals at t that are not present at any future time"
+di "reexit - number of individuals at t not present at t+1 that appear in later times"
+di
+di "the following identities hold:"
+di "total[t+1]=total[t]-exit[t]+entry[t+1]"
+di "inc1=total-entry)"
+di "entry=first+reent"
+di "inc2=inc1[t+1]"
+di "exit=last+reexit"
 if "`excel'"!="" {
 qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
 qui {
 puttexttoexcel A1 "`fr'"
-putexcel A3=("period")
+putexcel A3=("time")
 putexcel B3=("total")
 putexcel C3=("inc1")
 putexcel D3=("entry")
@@ -883,7 +1010,7 @@ sum `t', meanonly
 gen `tt'=`t'-r(min)+1
 local k=r(max)-r(min)+1
 drop `t'
-qui ${sreshape}reshape wide _dum, i(`i') j(`tt')
+qui ${ps_reshape}reshape wide _dum, i(`i') j(`tt')
 qui recode _dum1 .=0
 qui gen str Pattern=string(_dum1)
 if `k'>1 {
@@ -892,14 +1019,8 @@ capture recode _dum`ct' .=0
 qui capture replace Pattern=Pattern+string(_dum`ct')
 }
 }
-if "`fast'"=="" { 
-contract Pattern
+${ps_gtools}contract Pattern
 rename _freq Frequency
-}
-else {
-gen byte _one=1
-fcollapse (count) Frequency=_one, by(Pattern)
-}
 qui count
 if r(N)<$ps_maxpat {
 global ps_maxpat=r(N)
@@ -943,7 +1064,7 @@ local fr "Distribution of complete runs by size"
 di "`fr'"
 di _dup(53) "*"
 tempname col1 col2
-tab N if n==1, matrow(`col1') matcell(`col2')  
+tab N if n==1, matrow(`col1') matcell(`col2')
 if "`excel'"!="" {
 qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
 puttexttoexcel A1 "`fr'"
@@ -954,13 +1075,15 @@ restore
 end
 
 program define module7
-args i t f keep file
+args i t f keep miss excel
 preserve
+local sheet "demoby"
 capture drop if `f'==.
 capture drop if `f'==""
 qui keep `i' `t' `f' _nn _ord
 sort `i' `t'
-gen total=1
+qui bys `i' (`t'): gen _nnn=_n
+gen byte total=1
 label var total "Total"
 qui bys `i' (`t'): gen byte sing=_N==1
 qui bys `i' (`t'): gen byte first=(_n==1)
@@ -968,42 +1091,106 @@ qui by `i' (`t'): gen byte last=(_n==_N)
 qui bys `i' (`t'): gen byte stay=(`f'==`f'[_n-1])
 qui sum _nn, meanonly
 local maxnn=r(max)-1
-qui gen byte return=.
+qui gen byte rmover=.
 forval j=1/`maxnn' {
 capture drop var1
 capture drop var2
-qui bys `i' (`t'): gen byte var1=(`f'==`f'[`j'])
-qui bys `i' (`t'): gen byte var2=var1==1&var1[_n-1]==0& _nn>`j'
-qui replace return=1 if var2==1
+qui bys `i' (`t'): gen byte var1=sum((`f'==`f'[`j'])*_nnn>`j')
+qui bys `i' (`t'): gen byte var2=var1==1&var1[_n-1]==0& _nnn>`j'
+qui replace rmover=1 if var2==1
 }
-qui recode return .=0
-qui gen mover=1-first-return-stay
-if "`keep'"!="" {
+qui recode rmover .=0
+qui replace rmover=rmover-stay
+qui gen byte fmover=1-first-rmover-stay
+qui gen byte mover=fmover+rmover
+if "`keep'"!=""|"`miss'"!="" {
 tempfile temp9
-qui gen byte _demoby_`f'=first+2*stay+3*mover+4*return
+qui gen byte _demoby_`f'=first+2*stay+3*fmover+4*rmover
 qui save `temp9', replace
 }
-if "`fast'"=="" { 
-collapse (sum) total first last sing stay mover return, by(`t')
-}
-else {
-fcollapse (sum) total first last sing stay mover return, by(`t')
-}
-rename `t' period
+if "`miss'"=="" {
+${ps_gtools}collapse (sum) total first last sing stay mover fmover rmover, by(`t') fast
+rename `t' time
 di _dup(53) "*"
 local fr "Decomposition of changes across `f' over time "
 di "`fr'"
 di _dup(53) "*"
-list 
-di "period - time period"
-di "total - total number of individuals at period t"
+list, noobs
+di "Note: missing values of `f' are discarded for the analysis (to include specify missing option)"
+di "time - time period"
+di "total - total number of individuals at time t (total=firs+stay+mover)"
 di "first - number of individuals at t that show up for the first time"
 di "last - number of individuals at t that show up for the last time"
-di "singleton - number of individuals at t that show only at one period (singletons)"
-di "stayer - number of individuals at t that were present at the same `f' unit since their last observation"
-di "mover - number of individuals at t that were present at a new `f' unit"
-di "return - number of individuals at t that returned to a `f' unit"
+di "singleton - number of individuals at t that show up only that time (singletons)"
+di "stayer - number of individuals at t that were present at the same category of `f' since their last observation"
+di "mover - number of individuals at t that were present at a different category of `f' since their last observation (mover=fmover+rmover)"
+di "fmover - number of movers at t that are for the first time at that category of `f'"
+di "rmover - number of movers at t that are returning to a category of `f'"
+if "`excel'"!="" {
+qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
+qui {
+puttexttoexcel A1 "`fr'"
+putexcel A3=("time")
+putexcel B3=("total")
+putexcel C3=("first")
+putexcel D3=("last")
+putexcel E3=("sing")
+putexcel F3=("stay")
+putexcel G3=("mover")
+putexcel H3=("fmover")
+putexcel I3=("rmover")
+}
+tempname mat
+mkmat _all, mat(`mat')
+qui putexcel A4=matrix(`mat'), sheet(`sheet') colwise
+}
+}
 restore
+if "`miss'"!="" {
+preserve
+qui keep `i' `t' `f' _nn _ord
+qui merge 1:1 _ord using `temp9', keepusing(first last sing stay mover fmover rmover)
+drop _m
+gen byte miss=`f'>=.
+gen byte total=1
+${ps_gtools}collapse (sum) total miss first last sing stay mover fmover rmover, by(`t') fast
+rename `t' time
+di _dup(53) "*"
+local fr "Decomposition of changes across `f' over time "
+di "`fr'"
+di _dup(53) "*"
+list
+di "time - time period"
+di "total - total number of individuals at time t (total=miss+first+stay+mover)"
+di "miss - total number of individuals with missing information for `f'"
+di "first - number of individuals at t that show up for the first time"
+di "last - number of individuals at t that show up for the last time"
+di "singleton - number of individuals at t that show up only that time (singletons)"
+di "stayer - number of individuals at t that were present at the same category of `f' since their last observation"
+di "mover - number of individuals at t that were present at a different category of `f' since their last observation (mover=fmover+rmover)"
+di "fmover - number of movers at t that are observed for the first time at that category of `f'"
+di "rmover - number of movers at t that are observed as returning to a category of `f'"
+if "`excel'"!="" {
+qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
+qui {
+puttexttoexcel A1 "`fr'"
+putexcel A3=("time")
+putexcel B3=("total")
+putexcel C3=("miss")
+putexcel D3=("first")
+putexcel E3=("last")
+putexcel F3=("sing")
+putexcel G3=("stay")
+putexcel H3=("mover")
+putexcel I3=("fmover")
+putexcel J3=("rmover")
+}
+tempname mat
+mkmat _all, mat(`mat')
+qui putexcel A4=matrix(`mat'), sheet(`sheet') colwise
+}
+restore
+}
 if "`keep'"!="" {
 qui merge 1:1 _ord using `temp9', keepusing(_demoby_`demoby')
 drop _merge
@@ -1021,13 +1208,12 @@ local tmin=r(tmin)
 local imax=r(imax)
 local imin=r(imin)
 di
-di _dup(53) "*"
-di "Analyzing `c(filename)'"
-di _dup(53) "*"
+di as text _dup(53) "*"
+di as text "Analyzing `c(filename)'"
+di as text _dup(53) "*"
 di
 if "`excel'"!="" {
-putexcel clear
-qui putexcel set "`excel'.xlsx", sheet("Main") replace
+qui putexcel set "`excel'.xlsx", sheet("Main") modify
 puttexttoexcel A1 "Basic Descriptive Statistics"
 puttexttoexcel A3 "filename"
 puttexttoexcel B3 "`c(filename)'"
@@ -1036,6 +1222,8 @@ puttexttoexcel B4 "`c(current_time)' - `c(current_date)' "
 }
 qui count
 local totobs=r(N)
+di _dup(53) "*"
+di "Basic descriptives"
 di _dup(53) "*"
 di "There are `totobs' time x individuals observations"
 if "`excel'"!="" {
@@ -1061,14 +1249,14 @@ puttexttoexcel A10 "Maximum time range"
 putnumtoexcel B10 `range'
 }
 local avgperin=`totobs'/`ni'
-di "The average number of periods per individual is `avgperin'"
+di "The average number of periods per individual is " %4.2f `avgperin'
 if "`excel'"!="" {
 puttexttoexcel A11 "Average number of periods per individual"
 putnumtoexcel B11 `avgperin'
 }
 local potmax=`ni'*(`tmax'-`tmin'+1)
 local share1=100*`totobs'/`potmax'
-di "The level of completeness is " %3.2f `share1' "%" "(100% is a fully balanced panel)" 
+di "The level of completeness is " %3.2f `share1' "%" " (100% is a fully balanced panel)"
 if "`excel'"!="" {
 puttexttoexcel A12 "Potential maximum # of cells"
 putnumtoexcel B12 `potmax'
@@ -1077,7 +1265,7 @@ putnumtoexcel B13 `share1'
 }
 qui sum _ngaps if _nn==1, meanonly
 local avggapi=r(mean)
-di "Average number of gaps per individual is " `avggapi'
+di "Average number of gaps per individual is "  %4.2f `avggapi'
 if "`excel'"!="" {
 puttexttoexcel A14 "Average number of gaps per individual"
 putnumtoexcel B14 `avggapi'
@@ -1085,7 +1273,7 @@ putnumtoexcel B14 `avggapi'
 qui sum _dift if _dift>0, meanonly
 local avgapsize=r(mean)
 local larggap=r(max)
-di "Average gap size is " `avgapsize'
+di "Average gap size is " %4.2f `avgapsize'
 di "Largest gap is " `larggap'
 di _dup(53) "*"
 if "`excel'"!="" {
@@ -1095,7 +1283,7 @@ puttexttoexcel A16 "Largest gap"
 putnumtoexcel B16 `larggap'
 }
 *di "Average run size is "
-*di "Largest run is " 
+*di "Largest run is "
 di
 di _dup(53) "*"
 local fr "Distribution of number of observations per individual"
@@ -1103,13 +1291,13 @@ local sheet "obsperind"
 di "`fr'"
 di _dup(53) "*"
 tempname col1 col2
-tab _NN if _nn==1, matrow(`col1') matcell(`col2')  
+tab _NN if _nn==1, matrow(`col1') matcell(`col2')
 if "`excel'"!="" {
 qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
 puttexttoexcel A1 "`fr'"
 puttabtoexcel 1 3 "#obs per ind" `col1' `col2' `sheet'
 }
-* 
+*
 di
 di _dup(53) "*"
 local fr "Number of individuals per time unit"
@@ -1145,14 +1333,8 @@ qui replace _check=3 if `di'==0&`dj'==1&`dmj'==0
 qui replace _check=4 if `di'==0&`dj'==0&`dmj'==0
 * Now handle missing values
 bys `group' (`var'): gen `allmi'=`var'[1]==.
-if "`fast'"=="" { 
-bys `group': egen double `minv'=min(`var')
-bys `group': egen double `maxv'=max(`var')
-}
-else {
-fcollapse (min) `minv'=`var', by(`group') merge
-fcollapse (max) `maxv'=`var', by(`group') merge
-}
+qui bys `group':  ${ps_gtools}egen double `minv'=min(`var')
+qui bys `group':  ${ps_gtools}egen double `maxv'=max(`var')
 qui replace _check=5 if `allmi'==1
 qui replace _check=6 if `di'==1&`allmi'==0&`minv'==`maxv'&`dmj'==1
 qui replace _check=7 if `di'==1&`minv'!=`maxv'&`dmj'==1
@@ -1166,7 +1348,7 @@ label define _checklabel ///
 5 "5 1:. all values missing for `var' " ///
 6 "6 1:.1 unique values of `var' with missing " ///
 7 "7 1:.m multiple values of `var' with missing " ///
-8 "8 m:. multiple values of id with missing " 
+8 "8 m:. multiple values of id with missing "
 label values _check _checklabel
 di _dup(53) "*"
 di "Checking if variable `var' can be id"
@@ -1177,133 +1359,395 @@ end
 
 program define checkabsval
 args  i t vars
+sort `i' `t'
 tempvar chg
 foreach var of varlist `vars' {
 capture drop `chg'
-qui gen double `chg'=`var'-l$ps_nlags.`var'
-*capture drop _abs_`var'
-qui gen _abs_`var'=0
-qui replace _abs_`var'=1 if `chg'>0&`chg'<=$ps_absv
-qui replace _abs_`var'=2 if `chg'<0&`chg'>=-$ps_absv
-qui replace _abs_`var'=3 if `chg'==0
-qui replace _abs_`var'=4 if `chg'>$ps_absv&`chg'<.
-qui replace _abs_`var'=5 if `chg'<-$ps_absv
-qui replace _abs_`var'=6 if `chg'==.
+qui gen double `chg'=${ps_abst}${ps_nla}.`var'
+qui gen _abs_${ps_abst}${ps_nla}_`var'=0
+qui replace _abs_${ps_abst}${ps_nla}_`var'=1 if `chg'>0&`chg'<=$ps_absv
+qui replace _abs_${ps_abst}${ps_nla}_`var'=2 if `chg'<0&`chg'>=-$ps_absv
+qui replace _abs_${ps_abst}${ps_nla}_`var'=3 if `chg'==0
+qui replace _abs_${ps_abst}${ps_nla}_`var'=4 if `chg'>$ps_absv&`chg'<.
+qui replace _abs_${ps_abst}${ps_nla}_`var'=5 if `chg'<-$ps_absv
+qui replace _abs_${ps_abst}${ps_nla}_`var'=6 if `chg'==.
 }
 end
 
 program define checkrelval
 args  i t vars
+sort `i' `t'
 tempvar chg
 foreach var of varlist `vars' {
 capture drop `chg'
-qui gen double `chg'=(200*(`var'-l$ps_nlags.`var'))/(`var'+l$ps_nlags.`var')
-*capture drop _rel_`var'
-qui gen _rel_`var'=0
-qui replace _rel_`var'=1 if `chg'>0&`chg'<=$ps_relv
-qui replace _rel_`var'=2 if `chg'<0&`chg'>=-$ps_relv
-qui replace _rel_`var'=3 if `chg'==0
-qui replace _rel_`var'=4 if `chg'>$ps_relv&`chg'<.
-qui replace _rel_`var'=5 if `chg'<-$ps_relv
-qui replace _rel_`var'=6 if `chg'==.
+qui gen double `chg'=100*(`var'-l${ps_nlr}.`var')*(1+${ps_denlag})/(abs((${ps_denlag}*`var'+l${ps_nlr}.`var')))
+qui gen _rel_L${ps_nlr}_`var'=0
+qui replace _rel_L${ps_nlr}_`var'=1 if `chg'>0&`chg'<=$ps_relv
+qui replace _rel_L${ps_nlr}_`var'=2 if `chg'<0&`chg'>=-$ps_relv
+qui replace _rel_L${ps_nlr}_`var'=3 if `chg'==0
+qui replace _rel_L${ps_nlr}_`var'=4 if `chg'>$ps_relv&`chg'<.
+qui replace _rel_L${ps_nlr}_`var'=5 if `chg'<-$ps_relv
+qui replace _rel_L${ps_nlr}_`var'=6 if `chg'==.
 }
 end
 
 program define checkvar
-args type dim var dimlab pos excel
+args nn NN dim var dim1 dim2 pos excel
 tempvar dum1 dum2 max min
 di
 di _dup(53) "*"
-di "Analyzing variable `var' within `dimlab' "
+di "Analyzing variable `var' within `dim1' "
 di _dup(53) "*"
 qui count
-local NN=r(N)
+local totNN=r(N)
+qui count if `nn'==1
+local nind=r(N)
 qui sum `var', meanonly
 local Nvar=r(N)
 local Nmin=r(min)
 local Nmax=r(max)
-local shV=`Nvar'/`NN'*100
+local shV=`Nvar'/`totNN'*100
+calmmvar `dim' `var' `nn' `NN' `dum1'
+local singnon=r(singnon)
+local singmis=r(singmis)
+local allmiss=r(allmiss)
+local oneval=r(oneval)
+local tinvnon=r(tinvnon)
+local tinvmis=r(tinvmis)
+local tvarnon=r(tvarnon)
+local tvarmis=r(tvarmis)
+local shsingnon=`singnon'/`nind'*100
+local shsingmis=`singmis'/`nind'*100
+local shallmiss=`allmiss'/`nind'*100
+local shoneval=`oneval'/`nind'*100
+local shtinvnon=`tinvnon'/`nind'*100
+local shtinvmis=`tinvmis'/`nind'*100
+local shtvarnon=`tvarnon'/`nind'*100
+local shtvarmis=`tvarmis'/`nind'*100
+di 
+bys `dim': egen _w_=total(`dum1')  
+di "There are " %5.2f `shV' "% nonmissing observations (`Nvar' out of `totNN')"
 di
-di "There are " %5.2f `shV' "% nonmissing observations (`Nvar' out of `NN')"
-di
-qui count if `type'==1
-local nind=r(N)
-* Complete
-bys `dim' (`var'): gen byte `dum1'=(`var'[1]==`var'[_N])&(`var'[_N]<.)
-qui count if `dum1'==1&`type'==1
-local cvar=r(N)
-local shcvar=`cvar'/`nind'*100
-* Variable (inconsistent observations without missing)
-bys `dim' (`var'): gen byte `dum2'=(`var'[1]!=`var'[_N])&(`var'[_N]<.)
-qui count if `dum2'==1&`type'==1
-local vvar=r(N)
-local shvvar=`vvar'/`nind'*100
-qui replace `dum1'=2 if `dum2'
-drop `dum2'
-* All missing
-bys `dim' (`var'): gen byte `dum2'=missing(`var'[1])
-qui count if `dum2'==1&`type'==1
-qui replace `dum1'=3 if `dum2'
-local mvar=r(N)
-local shmvar=`mvar'/`nind'*100
-drop `dum2'
-*
-if "`fast'"=="" { 
-qui bys `dim': egen double `max'=max(`var')
-qui bys `dim': egen double `min'=min(`var')
-}
-else {
-fcollapse (max) `max'=`var', by(`dim') merge
-fcollapse (min) `min'=`var', by(`dim') merge
-}
-qui bys `dim' (`var'): gen byte `dum2'=(`max'==`min')&`var'[1]<.&missing(`var'[_N])
-qui count if `dum2'==1&`type'==1
-qui replace `dum1'=4 if `dum2'
-local mcvar=r(N)
-local shmcvar=`mcvar'/`nind'*100
-local vmvar=`nind'-`mvar'-`cvar'-`vvar'-`mcvar'
-local shvmvar=`vmvar'/`nind'*100
-*
 di "For the variable `var' we have:"
-di "        values range from `Nmin' to `Nmax'"
-di "        `cvar' complete invariant `dimlab'-observations (" %5.2f `shcvar' "%) "
-di "        `vvar' complete variant `dimlab'-observations (" %5.2f `shvvar' "%) "
-di "        `mvar' completely missing `dimlab'-observations (" %5.2f `shmvar' "%)"
-di "        `mcvar' invariant `dimlab'-observations with missing values (" %5.2f `shmcvar' "%) "
-di "        `vmvar' variant `dimlab'-observations with missing values (" %5.2f `shvmvar' "%) "
-qui recode `dum1' 0=5
-rename `dum1' _w_
+di "     values range from `Nmin' to `Nmax'"
+di "     `singnon' singleton `dim1'-observations with non-missing value (" %5.2f `shsingnon' "%) "
+di "     `singmis' singleton `dim1'-observations with missing value (" %5.2f `shsingmis' "%) "
+di "     `allmiss' non-singleton `dim1'-observations with all values missing (" %5.2f `shallmiss' "%) "
+di "     `oneval' non-singleton `dim1'-observations with only one valid value (" %5.2f `shoneval' "%) "
+di "     `tinvnon' non-singleton `dim1'-observations with `dim2' invariant and non-missing values (" %5.2f `shtinvnon' "%) "
+di "     `tinvmis' non-singleton `dim1'-observations with `dim2' invariant and missing values (" %5.2f `shtinvmis' "%) "
+di "     `tvarnon' non-singleton `dim1'-observations with `dim2' variant and non-missing values (" %5.2f `shtvarnon' "%) "
+di "     `tvarmis' non-singleton `dim1'-observations with `dim2' variant and missing values (" %5.2f `shtvarmis' "%) "
 if "`excel'"!="" {
 excelcol `pos'
 local col `r(column)'
 puttexttoexcel `col'3 "`var'"
-putnumtoexcel `col'4 `NN'
+putnumtoexcel `col'4 `totNN'
 putnumtoexcel `col'5 `Nvar'
 putnumtoexcel `col'6 `shV'
 putnumtoexcel `col'8 `Nmin'
 putnumtoexcel `col'9 `Nmax'
 putnumtoexcel `col'11 `nind'
-putnumtoexcel `col'12 `cvar'
-putnumtoexcel `col'13 `vvar'
-putnumtoexcel `col'14 `mvar'
-putnumtoexcel `col'15 `mcvar'
-putnumtoexcel `col'16 `vmvar'
+putnumtoexcel `col'12 `singnon'
+putnumtoexcel `col'13 `singmis'
+putnumtoexcel `col'14 `allmiss'
+putnumtoexcel `col'15 `oneval'
+putnumtoexcel `col'17 `tinvnon'
+putnumtoexcel `col'16 `tinvmis'
+putnumtoexcel `col'19 `tvarnon'
+putnumtoexcel `col'18 `tvarmis'
 }
+end
+
+program define varstats
+args i nn NN vars3 excel
+preserve
+local sheet "variables"
+tempvar dum1
+qui keep `i' `nn' `NN' `vars3'
+local nobs=c(N)+8
+qui set obs `nobs'
+foreach var of varlist `vars3' {
+capture drop `dum1'
+calmmvar `i' `var' `nn' `NN' `dum1'
+qui replace `var'=r(singnon) in -1
+qui replace `var'=r(singmis) in -2
+qui replace `var'=r(allmiss) in -3
+qui replace `var'=r(oneval) in -4
+qui replace `var'=r(tinvnon) in -5
+qui replace `var'=r(tinvmis) in -6
+qui replace `var'=r(tvarnon) in -7
+qui replace `var'=r(tvarmis) in -8
+}
+qui keep in -8/l
+qui keep `vars3'
+qui xpose, clear var
+rename _varname variable
+order var v8 v7 v6 v5 v4 v3 v2 v1
+rename v8 s_nonmiss
+rename v7 s_missing
+rename v6 allmissing
+rename v5 onevalue
+rename v4 timeinv_nm
+rename v3 timeinv_wm
+rename v2 timevar_nm
+rename v1 timevar_wm
+order var s_nonmiss s_missing allmissing onevalue timeinv_nm timeinv_wm timevar_nm timevar_wm  
+sort var
+di
+di "Distribution of panel units by type of observation for all variables"
+di
+list, nocompress noobs abb(10)
+di "s_nonmiss - singleton observation with nonmissing value of the variable"
+di "s_missing - singleton observation with missing value for the variable"
+di "allmissing - non-singleton with all missing values of the variable"
+di "onevalue - non-singleton with only one valid value of the variable"
+di "timeinv_nm - non-singleton with time-invariant values and nonmissing values for the variable"
+di "timeinv_wm - non-singleton with time-invariant values and missing values for the variable"
+di "timevar_nm - non-singleton with time-variant values and nonmissing values for the variable"
+di "timevar_wm - non-singleton with time-variant values and missing values for the variable"
+if "`excel'"!="" {
+qui {
+qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
+puttexttoexcel A1 "Panel unit descriptives of variables "
+tempname mat1
+mkmat s_nonmiss s_missing allmissing onevalue timeinv_nm timeinv_wm timevar_nm timevar_wm, mat(`mat1')
+qui putexcel B4=matrix(`mat1'), sheet(`sheet') colwise
+puttexttoexcel B3 "s_nonmiss"
+puttexttoexcel C3 "s_missing"
+puttexttoexcel D3 "allmissing"
+puttexttoexcel E3 "onevalue"
+puttexttoexcel F3 "timeinv_nm"
+puttexttoexcel G3 "timeinv_wm"
+puttexttoexcel H3 "timevar_nm"
+puttexttoexcel I3 "timevar_wm"
+local NN=_N
+forval i=1/`NN' {
+local text =var[`i']
+local pos=`i'+3
+puttexttoexcel A`pos' "`text'"
+}
+local pos=`pos'+2
+puttexttoexcel A`pos' "s_nonmiss - singleton observation with nonmissing value of the variable"
+local pos=`pos'+1
+puttexttoexcel A`pos' "s_missing - singleton observation with missing value for the variable"
+local pos=`pos'+1
+puttexttoexcel A`pos' "allmissing - non-singleton with all missing values of the variable"
+local pos=`pos'+1
+puttexttoexcel A`pos' "onevalue - non-singleton with only one valid value of the variable"
+local pos=`pos'+1
+puttexttoexcel A`pos' "timeinv_nm - non-singleton with time-invariant values and nonmissing values for the variable"
+local pos=`pos'+1
+puttexttoexcel A`pos' "timeinv_wm - non-singleton with time-invariant values and missing values for the variable"
+local pos=`pos'+1
+puttexttoexcel A`pos' "timevar_nm - non-singleton with time-variant values and nonmissing values for the variable"
+local pos=`pos'+1
+puttexttoexcel A`pos' "timevar_wm - non-singleton with time-variant values and missing values for the variable"
+}
+}
+restore
 end
 
 program define tabover
 args t var excel
 preserve
-contract `t' `var'
+${ps_gtools}contract `t' `var'
 rename _freq n
-qui ${sreshape}reshape wide n, i(`var') j(`t')
+qui ${ps_reshape}reshape wide n, i(`var') j(`t')
 di
 di "Tabulation of `var' over time"
-list
+list, noobs
 di
 if "`excel'"!="" {
-qui putexcel set "`excel'.xlsx", sheet("tab_`var'") modify
-export excel using "`excel'.xlsx", sheet("tab_`var'") firstrow(variables)
+qui putexcel set "`excel'.xlsx", sheet("tabovert_`var'") modify
+export excel using "`excel'.xlsx", sheet("tabovert_`var'") firstrow(variables)
+}
+restore
+end
+
+program define fromto
+args i t var fromv tov excel
+tempfile file1
+preserve
+qui keep if `t'==`tov'
+keep `i' `var'
+rename `var' `var'`tov'
+sort `i'
+qui save `file1'
+restore
+preserve
+qui keep if `t'==`fromv'
+keep `i' `var'
+rename `var' `var'`fromv'
+sort `i'
+qui merge 1:1 `i' using `file1'
+drop _m
+gen byte _type=4
+qui replace _type=1 if (`var'`fromv'<.)&missing(`var'`tov')
+qui replace _type=2 if missing(`var'`fromv')&(`var'`tov'<.)
+qui replace _type=3 if `var'`fromv'==`var'`tov' &!missing(`var'`tov')
+qui drop if missing(`var'`fromv')&missing(`var'`tov')
+capture label drop _fromtolabel
+label define _fromtolabel 0 "0 not flagged" 1 "1 exit" 2 "2 entry" 3 "3 same" 4 "4 dif"
+label values _type _fromtolabel
+qui count
+if r(N) >0 {
+if ${ps_ftkeep} {
+tempfile ftkeep
+qui save `ftkeep', replace
+}
+}
+${ps_gtools}contract `var'* _type
+rename _freq n
+if ${ps_ftmiss} {
+qui drop if `var'`fromv'==.|`var'`tov'==.
+}
+if ${ps_ftasc}>0|${ps_ftdes}>0 {
+if ${ps_ftasc} {
+sort  n `var'`fromv' `var'`tov'
+}
+if ${ps_ftdes} {
+gsort - n `var'`fromv' `var'`tov'
+}
+}
+else {
+gsort - _type `var'`fromv' `var'`tov'
+}
+di
+di "Change of `var' from `fromv' to `tov'"
+list, noobs
+di
+if ${ps_ftsave} {
+qui save fromto_`var'_`fromv'_`tov', replace
+}
+if "`excel'"!="" {
+qui putexcel set "`excel'.xlsx", sheet("fromto_`var'_`fromv'_`tov'") modify
+export excel using "`excel'.xlsx", sheet("fromto_`var'_`fromv'_`tov'") firstrow(variables)
+}
+restore
+
+if ${ps_ftkeep} {
+tempvar mergevar
+qui merge m:1 `i' using `ftkeep', keepusing(_type) generate(`mergevar')
+qui recode _type (.=0)
+qui replace _type=0 if !(`t'==`tov'|`t'==`fromv')
+capture drop _ft_`var'_`fromv'_`tov'
+rename _type _ft_`var'_`fromv'_`tov'
+}
+end
+
+program define returnto
+args i t var val1 val2 val3 excel
+tempfile file1 file2 file3
+preserve
+qui keep if `t'==`val2'
+keep `i' `var'
+rename `var' `var'`val2'
+sort `i'
+qui save `file1'
+restore
+preserve
+qui keep if `t'==`val3'
+keep `i' `var'
+rename `var' `var'`val3'
+sort `i'
+qui save `file2'
+restore
+preserve
+qui keep if `t'==`val1'
+keep `i' `var'
+rename `var' `var'`val1'
+sort `i'
+qui merge 1:1 `i' using `file1'
+drop _m
+sort `i'
+qui merge 1:1 `i' using `file2'
+drop _m
+tempvar band
+qui gen `band'=`var'`val1'*${ps_rtwit}/100
+qui keep if (`var'`val3'<=(`var'`val1'+`band'))&(`var'`val3'>=(`var'`val1'-`band'))
+qui drop if `var'`val1'==.
+qui drop if `var'`val3'==.
+qui drop if (`var'`val2'<=(`var'`val1'+`band'))&(`var'`val2'>=(`var'`val1'-`band'))
+if ${ps_rtmiss} {
+qui drop if `var'`val2'==.
+}
+qui count
+if r(N)>0 {
+if ${ps_rtkeep} {
+tempfile rtkeep
+qui save `rtkeep', replace
+}
+${ps_gtools}contract `var'*
+rename _freq n
+di
+di "Return of `var' from `val1' to `val3'"
+di
+}
+qui count
+if r(N)==0 {
+di "There are no observations!"
+}
+else {
+if ${ps_rtasc} {
+sort  n `var'`val1' `var'`val3'
+}
+if ${ps_rtdes} {
+gsort - n `var'`val1' `var'`val3'
+}
+list, noobs
+di
+if ${ps_rtsave} {
+qui save returnto_`var'_`val1'_`val2'_`val3', replace
+}
+if "`excel'"!="" {
+qui putexcel set "`excel'.xlsx", sheet("return_`var'_`val1'_`val2'_`val3'") modify
+export excel using "`excel'.xlsx", sheet("return_`var'_`val1'_`val2'_`val3'") firstrow(variables)
+}
+}
+restore
+if ${ps_rtkeep} {
+tempvar mergevar
+qui merge m:1 `i' using `rtkeep', keepusing(`band') generate(`mergevar')
+drop `band'
+qui recode `mergevar' (1=0) (3=1)
+capture drop _ret_`var'_`val1'_`val3'
+rename `mergevar' _ret_`var'_`val1'_`val3'
+}
+end
+
+program define statover
+args t var excel
+preserve
+keep `var' `t'
+tempvar one miss zeros
+gen byte `one'=1
+gen byte `miss'=missing(`var')
+gen byte `zeros'=`var'==0
+if ${ps_sodet} {
+${ps_gtools}collapse (sum) total=`one' (count) valid=`var' (sum) missing=`miss' (sum) zeros=`zeros' (mean) mean=`var' (sd) sd=`var' ///
+(min) min=`var' (max) max=`var' (p1) p1=`var' (p5) p5=`var'  (p25) p25=`var' (p50) p50=`var' (p75) p75=`var' (p95) p95=`var' (p99) p99=`var'  ///
+, by(`t') fast
+}
+else {
+${ps_gtools}collapse (sum) total=`one' (count) valid=`var' (sum) missing=`miss' (sum) zeros=`zeros' (mean) mean=`var' (sd) sd=`var' ///
+(p25) p25=`var' (p50) p50=`var' (p75) p75=`var' ///
+, by(`t') fast
+}
+char `t'[varname] "time"
+di
+if ${ps_sodet} {
+di "Descriptive statistics of `var' over time (detailed)"
+}
+else {
+di "Descriptive statistics of `var' over time"
+}
+list, subvar noobs
+di
+if "`excel'"!="" {
+qui putexcel set "`excel'.xlsx", sheet("statovert_`var'") modify
+export excel using "`excel'.xlsx", sheet("statovert_`var'") firstrow(variables)
+puttexttoexcel a1 "time"
 }
 restore
 end
@@ -1313,32 +1757,137 @@ args i t var excel
 preserve
 local sheet "fl_`var'"
 keep `i' `t' `var'
-qui bys `i' (`t'): gen inc1=(`t'-`t'[_n-1]==1)
+tempvar inc inc1 inc2 ent exi exiwm
+qui gen n_var=!missing(`var')
+qui bys `i' (`t'): gen byte n_inc=(`t'-`t'[_n-1]==1)
+qui bys `i' (`t'): gen byte n_ent=(`t'-`t'[_n-1])>1
+qui bys `i' (`t'): gen byte n_exi=(`t'[_n+1]-`t'>1)& `t'[_n+1]!=.
+qui bys `i' (`t'): gen `exiwm'=(`t'[_n+1]-`t'>1)& `t'[_n+1]!=.&`var'==.
+qui gen byte n_inc1=n_inc&missing(`var'[_n-1])
+qui gen byte n_inc2=n_inc&missing(`var')
+qui gen byte n_inc0=(n_inc-n_inc1-n_inc2)>0
+qui gen byte n_ent0=n_ent&!missing(`var')
+qui gen byte n_miss=missing(`var')
+qui gen c_inc=.
+qui replace c_inc=`var'-`var'[_n-1] if n_inc
+qui gen c_exp=.
+qui gen n_exp=n_inc0&(`var'>`var'[_n-1])
+qui replace c_exp=`var'-`var'[_n-1] if n_exp
+qui gen c_cont=.
+qui gen n_cont=n_inc0&(`var'<`var'[_n-1])
+qui replace c_cont=`var'-`var'[_n-1] if n_cont
+qui gen c_inc1=.
+qui replace c_inc1=`var' if n_inc1
+qui gen c_inc2=.
+qui replace c_inc2=-`var'[_n-1] if n_inc2
+qui gen c_ent=.
+qui replace c_ent=`var' if n_ent
+${ps_gtools}collapse (sum) `var'  c_* n_* , by(`t') fast
+qui gen double chg=`var'-`var'[_n-1]
+qui gen double c_exit=chg-c_ent-c_inc-c_inc1-c_inc2
+rename `t' time
+order time `var' chg c_inc c_exp c_cont c_ent c_exi c_inc1 c_inc2
+list time `var' chg c_inc c_exp c_cont c_ent c_exi c_inc1 c_inc2, noobs
+di "Notes:"
+di "`var' - total sum of `var' at time t"
+di "chg - sum of `var' at t minus t-1"
+di "c_inc - changes from individuals present at t and at t-1 with valid values of `var'"
+di "  of which:"
+di "    c_exp - positive changes (expansions) from individuals present at t and at t-1"
+di "    c_cont - negative changes (contractions) from individuals present at t and at t-1"
+di "c_entry - change resulting from entry (present at t but not at t-1)"
+di "c_exit - change resulting from exits (present at t-1 but not at t)"
+di "c_inc1 - change from individuals present at t and t-1 but with missing data at t-1"
+di "c_inc2 - change from individuals present at t and t-1 but with missing data at t"
+di "`var'[t]=`var'[t-1]+chg, chg=c_inc+c_entry+c_exit+c_inc1+c_inc2, c_inc=c_exp+c_cont"
+di
+if "`excel'"!="" {
+qui {
+qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
+puttexttoexcel A1 "Flows for variable `var'"
+putexcel A3=("time")
+putexcel B3=("`var'")
+putexcel C3=("chg")
+putexcel D3=("chg_inc")
+putexcel E3=("expansion")
+putexcel F3=("contraction")
+putexcel G3=("entry")
+putexcel H3=("exit")
+putexcel I3=("miss_1")
+putexcel J3=("miss_2")
+tempname mat1
+mkmat time `var' chg c_inc c_exp c_cont c_ent c_exi c_inc1 c_inc2, mat(`mat1')
+qui putexcel A4=matrix(`mat1'), sheet(`sheet') colwise
+}
+}
+if $ps_flunit {
+qui gen n_exi0=n_var[_n-1]-n_var+n_ent0-n_inc2+n_inc1
+order time n_var n_miss n_inc0 n_exp n_cont n_ent0 n_exi0 n_inc1 n_inc2
+di _dup(53) "*"
+local fr "Valid observations for variable `var'"
+di "`fr'"
+di _dup(53) "*"
+list time n_var n_miss n_inc0 n_exp n_cont n_ent0 n_exi0 n_inc1 n_inc2, noobs
+di "Notes:"
+di "n_var - total number of nonmissing values of `var' at time t"
+di "n_miss - number of missing values of `var' at time t"
+di "n_inc0 - number of observations with nonmissing values at t and t-1 (incumbents) "
+di "  of which:"
+di "    n_exp - number of incumbents that increased `var' from time t-1 to t"
+di "    n_cont - number of incumbents that decreased `var' from time t-1 to t"
+di "n_ent0 - number of entrants with nonmissing values of `var'"
+di "n_exi0 - number of exits with nonmissing values of `var'"
+di "n_inc1 - number of incumbents with missing values of `var' at t-1 only"
+di "n_inc2 - number of incumbents with missing values of `var' at t only"
+if "`excel'"!="" {
+qui {
+qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
+puttexttoexcel M1 "Valid observations of `var'"
+putexcel L3=("time")
+putexcel M3=("n_var")
+putexcel N3=("n_miss")
+putexcel O3=("n_inc")
+putexcel P3=("n_exp")
+putexcel Q3=("n_cont")
+putexcel R3=("n_ent0")
+putexcel S3=("n_exi0")
+putexcel T3=("n_inc1")
+putexcel U3=("n_inc2")
+tempname mat2
+mkmat time n_var n_miss n_inc0 n_exp n_cont n_ent0 n_exi0 n_inc1 n_inc2, mat(`mat2')
+qui putexcel L4=matrix(`mat2'), sheet(`sheet') colwise
+}
+}
+}
+end
+
+program define calcflowold
+args i t var excel
+preserve
+local sheet "fl_`var'"
+keep `i' `t' `var'
+tempvar inc1
+qui bys `i' (`t'): gen `inc1'=(`t'-`t'[_n-1]==1)
 gen c_inc=0
-qui replace c_inc=`var'-`var'[_n-1] if inc1
+qui replace c_inc=`var'-`var'[_n-1] if `inc1'
 gen c_exp=0
-qui replace c_exp=`var'-`var'[_n-1] if inc1&(`var'>`var'[_n-1])
+qui replace c_exp=`var'-`var'[_n-1] if `inc1'&(`var'>`var'[_n-1])
 gen c_cont=0
-qui replace c_cont=`var'-`var'[_n-1] if inc1&(`var'<`var'[_n-1])
+qui replace c_cont=`var'-`var'[_n-1] if `inc1'&(`var'<`var'[_n-1])
 gen c_inc1=0
-qui replace c_inc1=`var' if inc1&missing(`var'[_n-1])
+qui replace c_inc1=`var' if `inc1'&missing(`var'[_n-1])
 gen c_inc2=0
-qui replace c_inc2=`var'[_n-1] if inc1&missing(`var')
+qui replace c_inc2=-`var'[_n-1] if `inc1'&missing(`var')
 gen c_entry=0
-qui replace c_entry=`var' if inc1==0
-if "`fast'"=="" { 
-collapse (sum) `var' c_* , by(`t')
-}
-else {
-fcollapse (sum) `var' c_* , by(`t')
-}
+qui replace c_entry=`var' if `inc1'==0
+${ps_gtools}collapse (sum) `var'  c_* , by(`t') fast
 qui gen double chg=`var'-`var'[_n-1]
 qui gen double c_exit=chg-c_entry-c_inc-c_inc1+c_inc2
-rename `t' period
-order period `var' chg c_inc c_exp c_cont c_entry c_exit  c_inc1 c_inc2
-list
+rename `t' time
+order time `var' chg c_inc c_exp c_cont c_entry c_exit  c_inc1 c_inc2
+list, noobs
 di "Notes:"
-di "`var' - total sum of `var' at period t"
+di "`var' - total sum of `var' at time t"
 di "chg - sum of `var' at t minus t-1"
 di "c_inc - changes from individuals present at t and at t-1 of which:"
 di "    c_exp - positive changes (expansions) from individuals present at t and at t-1"
@@ -1353,7 +1902,7 @@ if "`excel'"!="" {
 qui {
 qui putexcel set "`excel'.xlsx", sheet(`sheet') modify
 puttexttoexcel A1 "Flows for variable `var'"
-putexcel A3=("period")
+putexcel A3=("time")
 putexcel B3=("`var'")
 putexcel C3=("chg")
 putexcel D3=("chg_inc")
@@ -1373,21 +1922,28 @@ end
 program define calctrans, sortpreserve
 args i t var
 qui {
-tempvar tl lx fx NN0 NN1 dum
+tempvar lt lx fx NN0 NN1 dum
 gen `lx'=l.`var'
-gen `tl'=l.`t'
-bys `tl' `t' `var' :gen `NN0'=_N if `lx'<.&`var'<.
-bys `tl' `t' `var' `lx':gen `NN1'=_N if `lx'<.&`var'<.
-*capture drop _trans_`var'
+gen `lt'=l.`t'
+if $ps_transmiss==0 {
+gen byte `dum'=!missing(`var')*!missing(`lx')
+bys `lt' `t' `var' :egen `NN0'=total(`dum')
+bys `lt' `t' `var' `lx':egen `NN1'=total(`dum')
+}
+else {
+gen byte `dum'=!missing(`var')
+bys `t' `var' :egen `NN0'=total(`dum')
+bys `t' `var' `lx':egen `NN1'=total(`dum')
+}
 gen _trans_`var'=`NN1'/`NN0'*100
+qui recode _trans_`var' (0=.)
+drop `dum' 
 gen `dum'=.
-replace `dum'=1 if _trans_`var'<5
-replace `dum'=2 if _trans_`var'<25&_trans_`var'>=5
-replace `dum'=3 if _trans_`var'<75&_trans_`var'>=25
-replace `dum'=4 if _trans_`var'<95&_trans_`var'>=75
-replace `dum'=5 if _trans_`var'<100&_trans_`var'>=95
-replace `dum'=6 if _trans_`var'==100
-label values `dum' translabel
+qui replace `dum'=1 if _trans_`var'<$ps_transl
+qui replace `dum'=2 if _trans_`var'<$ps_transu & _trans_`var'>=$ps_transl
+qui replace `dum'=3 if _trans_`var'<100 & _trans_`var'>=$ps_transu
+qui replace `dum'=4 if _trans_`var'==100
+label values `dum' _translabel
 label var `dum' "Distribution of probabilities"
 }
 tab `t' `dum'
@@ -1403,9 +1959,9 @@ tempvar quant
 gen int `quant'=.
 forval yr=`start'/`end' {
 _pctile `var' if `t'==`yr', percentile($ps_qtll $ps_qtul)
-replace `quant'=1 if `var'<=r(r1) & `t'==`yr'
-replace `quant'=2 if `var'>r(r1) &  `var'<=r(r2) & `t'==`yr'
-replace `quant'=3 if `var'>r(r2) & `var'<.  & `t'==`yr'
+qui replace `quant'=1 if `var'<=r(r1) & `t'==`yr'
+qui replace `quant'=2 if `var'>r(r1) &  `var'<=r(r2) & `t'==`yr'
+qui replace `quant'=3 if `var'>r(r2) & `var'<.  & `t'==`yr'
 }
 tempvar dum2
 capture drop _tokeep_
@@ -1426,10 +1982,10 @@ bys `i' (`t'): replace _tokeep_=13 if `quant'==1&`quant'[_n-1]==.
 bys `i' (`t'): replace _tokeep_=14 if `quant'==2&`quant'[_n-1]==.
 bys `i' (`t'): replace _tokeep_=15 if `quant'==3&`quant'[_n-1]==.
 bys `i' (`t'): replace _tokeep_=16 if `quant'==.&`quant'[_n-1]==.
-label values _tokeep_ quantrlabel
+label values _tokeep_ _quantrlabel
 label var _tokeep_ "Distribution of quantile changes"
 }
-tab `t' _tokeep_ $ps_qtrel
+tab `t' _tokeep_ $ps_qtmiss $ps_qtrel
 end
 
 program define cprmiscvars
@@ -1437,16 +1993,10 @@ args i t var1 var2
 tempvar chg1 chg2 sd1 sd2 maxsd
 bys `i': gen `chg1'=`var1'-l.`var1'
 bys `i': gen `chg2'=`var2'-l.`var2'
-if "`fast'"=="" { 
-bys `i': egen `sd1'=sd(`var1')
-bys `i': egen `sd2'=sd(`var2')
-}
-else {
-fcollapse (sd) `sd1'=`var1', by(`i') merge
-fcollapse (sd) `sd2'=`var2', by(`i') merge
-}
-egen `maxsd'=rowmax(`sd1' `sd2')
-replace `maxsd'=`maxsd'*$ps_sdmis
+bys `i':  ${ps_gtools}egen `sd1'=sd(`var1')
+bys `i':  ${ps_gtools}egen `sd2'=sd(`var2')
+qui egen `maxsd'=rowmax(`sd1' `sd2')
+qui replace `maxsd'=`maxsd'*$ps_sdmis
 capture drop _flag_cpr
 gen _flag_cpr=abs(`chg1')>max(`maxsd',$ps_llmis)&abs(`chg2')>max(`maxsd',$ps_llmis)&(`chg1'<0&`chg2'>0|`chg1'>0&`chg2'<0)&!missing(`chg1')&!missing(`chg2')&(abs(`chg2'+`chg1')<$ps_difmis)
 end
@@ -1515,7 +2065,6 @@ qui putexcel `cell4'=matrix(`mat2'), sheet(`sheet') colwise
 qui putexcel `cell5'=matrix(`mat3'), sheet(`sheet')
 end
 
-
 * Equivalent to egen group function but faster
 program define gengroup
 args v1 v2
@@ -1524,44 +2073,402 @@ sort `v1'
 gen long `v2'=.
 if substr("`vtype'",1,3)=="str" {
 
-replace `v2'=1 in 1 if trim(`v1')!="" 
-replace `v2'=`v2'[_n-1]+(trim(`v1')!=trim(`v1'[_n-1])) if (trim(`v1')!=""&_n>1)
+qui replace `v2'=1 in 1 if trim(`v1')!=""
+qui replace `v2'=`v2'[_n-1]+(trim(`v1')!=trim(`v1'[_n-1])) if (trim(`v1')!=""&_n>1)
 }
 else {
-replace `v2'=1 in 1 if `v1'<. 
-replace `v2'=`v2'[_n-1]+(`v1'!=`v1'[_n-1]) if (`v1'<.&_n>1)
+qui replace `v2'=1 in 1 if `v1'<.
+qui replace `v2'=`v2'[_n-1]+(`v1'!=`v1'[_n-1]) if (`v1'<.&_n>1)
 }
 end
 
-program define my_parse_option, rclass
-    syntax  [, option(string) ]
-        gettoken vars option: option, parse(", ")    
-        check_is_var `vars' 
-    local case : word count `option'
-    while `case' > 0 {
-        gettoken left option: option, parse(", ")    
-        if "`left'"=="," {
-        local noption : word count `option'
-        forval i=1/`noption' {
-        gettoken toret option: option, parse(" ")
-        return local `toret' "`toret'"
-        }
-        }
-        else {
-        check_is_var `left'
-        local vars "`vars' `left'"
-        }
-        local case : word count `option'
-        }
-        return local vars "`vars'"
-    end
-
-program define check_is_var
-args var
-capture confirm variable `var'
-     if _rc>0 {
-     di in red "`var' is not an existing variable"
-     error 111
-     }
+* my version of excelcol
+program define excelcol, rclass
+args num
+if `num'<27 {
+local col=char(64+`num')
+return local column "`col'"
+}
+if `num'>26&`num'<703 {
+local char1=char(64+int(`num'/26))
+local char2=char(64+mod(`num',26))
+return local column "`char1'`char2'"
+}
+if `num'>702&`num'<16385 {
+local num1=int((`num'-703)/676)
+local char1=char(65+`num1')
+local num2=`num'-`num1'*676-676
+local char2=char(64+int(`num2'/26))
+local char3=char(64+mod(`num2',26))
+return local column "`char1'`char2'`char3'"
+}
+if `num'>16384 {
+di as error "Error: values above 16384 are not supported"
+error 912
+}
 end
 
+* Check
+program define check_valid_time
+args time num
+qui count if `time'==`num'
+if r(N)==0 {
+di "Error: argument is not valid. time `num' is not valid"
+error 11
+}
+end
+
+* Syntax checking
+
+*checkid
+program define check_checkid, rclass
+syntax varlist (min=1 max=1), [Keep ]
+return local vars "`varlist'"
+return local keep "`keep'"
+capture drop _check_`varlist'
+capture which group2hdfe
+if _rc>0 {
+di as err "Error: to use this option you need to install user-written package GROUP2HDFE"
+error 1
+}
+end
+
+*demoby
+program define check_demoby, rclass
+syntax varlist (min=1 max=1), [Keep Missing]
+return local vars "`varlist'"
+return local keep "`keep'"
+return local missing "`missing'"
+if `"`keep'"' == "keep" {
+capture drop _demoby_`demoby'
+capture label drop _demobylab
+label define _demobylab ///
+1 "1 first   " ///
+2 "2 stayer  " ///
+3 "3 fmover  " ///
+4 "4 rmover  " ///
+5 "5 missing "
+}
+end
+
+*wiv
+program define check_wiv, rclass
+syntax varlist, [Keep]
+return local vars "`varlist'"
+return local keep "`keep'"
+if `"`keep'"' == "keep" {
+foreach var of varlist `varlist' {
+capture drop _wiv_`var'
+}
+}
+capture label drop _wivlabel
+label define _wivlabel ///
+1 "1 singleton non-missing               " ///
+2 "2 singleton missing                   "   ///
+3 "3 all values missing                  "  ///
+4 "4 one non-missing value               " ///
+5 "5 time invariant with non-missing     " ///
+6 "6 time invariant with missing         " ///
+7 "7 time variant with non-missing       " ///
+8 "8 time variant with missing           "
+end
+
+*wtv
+program define check_wtv, rclass
+syntax varlist, [Keep]
+return local vars "`varlist'"
+return local keep "`keep'"
+if `"`keep'"' == "keep" {
+foreach var of varlist `varlist' {
+capture drop _wtv_`var'
+}
+}
+capture label drop _wtvlabel
+label define _wtvlabel ///
+1 "1 singleton non-missing            " ///
+2 "2 singleton missing                " ///
+3 "3 all values missing               " ///
+4 "4 one non-missing value            " ///
+5 "5 i-invariant with non-missing     " ///
+6 "6 i-invariant with missing         " ///
+7 "7 i-variant with non-missing       " ///
+8 "8 i-variant with missing           "
+end
+
+program define check_tabovert, rclass
+syntax varlist
+return local vars "`varlist'"
+end
+
+program define check_statovert, rclass
+syntax varlist, [Detail]
+return local vars "`varlist'"
+global ps_sodet=0
+if `"`detail'"' == "detail" {
+global ps_sodet=1
+}
+end
+
+program define check_flows, rclass
+syntax varlist, [Unit]
+global ps_flunit=0
+if `"`unit'"' == "unit" {
+global ps_flunit=1
+}
+return local vars "`varlist'"
+end
+
+program define check_trans, rclass
+syntax varlist, [Keep Missing Low(int 25) Upper(int 75)]
+if `upper'>100 {
+di "Upper limit may not exceed 100"
+error 111
+}
+if `upper'<=`low' {
+di "Upper limit must be higher than lower liwit"
+error 111
+}
+return local vars "`varlist'"
+return local keep "`keep'"
+return local miss "`missing'"
+global ps_transl=`low'
+global ps_transu=`upper'
+global ps_transmiss=0
+if `"`missing'"' == "missing" {
+global ps_transmiss=1
+}
+if $ps_transu<0|$ps_transu>100 {
+di as error "Error: upper treshold cannot be outside the 0-100 interval "
+error 11
+}
+if $ps_transl<0|$ps_transl>100 {
+di as error "Error: lower treshold cannot be outside the 0-100 interval "
+error 11
+}
+if $ps_transu<$ps_transl {
+di as error "Error: upper treshold ($ps_transu) is lower than lower threshold ($ps_transl) "
+error 11
+}
+if `"`keep'"' == "keep" {
+local keeptrans "keeptrans"
+foreach var of varlist `varlist' {
+capture drop _trans_`var'
+}
+}
+capture label drop _translabel
+label define _translabel ///
+1 "p<$ps_transl"   ///
+2 "$ps_transl<=p<$ps_transu" ///
+3 "$ps_transu<=p<100" ///
+4 "p=100 " 
+end
+
+program define check_quantr, rclass
+syntax varlist, [Keep Rel Missing Low(int 25) Upper(int 75)]
+if `upper'>100 {
+di "Upper limit may not exceed 100"
+error 111
+}
+if `upper'<=`low' {
+di "Upper limit must be higher than lower liwit"
+error 111
+}
+return local vars "`varlist'"
+return local keep "`keep'"
+return local missing "`missing'"
+return local rel "`rel'"
+global ps_qtll=`low'
+global ps_qtul=`upper'
+if `"`keep'"' == "keep" {
+local keepquantr "keepquantr"
+foreach var of varlist `varlist' {
+capture drop _quantr_`var'
+}
+}
+capture label drop _quantrlabel
+label define _quantrlabel ///
+1 "1to1" ///
+2 "1to2" ///
+3 "1to3" ///
+4 "2to1" ///
+5 "2to2" ///
+6 "2to3" ///
+7 "3to1" ///
+8 "3to2" ///
+9 "3to3" ///
+10 "1to." ///
+11 "2to." ///
+12 "3to." ///
+13 ".to1" ///
+14 ".to2" ///
+15 ".to3" ///
+16 ".to."
+end
+
+program define check_abs, rclass
+syntax varlist, [Keep Dif Lags(integer 1) Val(integer 10)]
+return local vars "`varlist'"
+return local keep "`keep'"
+return local dif "`dif'"
+return scalar lags=`lags'
+return scalar absv=`val'
+if `"`keep'"' == "keep" {
+foreach var of varlist `varlist' {
+capture drop _abs_${ps_abst}`lags'_`var'
+}
+}
+* Define labels
+capture label drop _chglabel
+label define _chglabel ///
+1 "1 positive change " ///
+2 "2 negative change " ///
+3 "3 no change       " ///
+4 "4 abnormal pos chg"  ///
+5 "5 abnormal neg chg"  ///
+6 "6 missing         "
+end
+
+program define check_rel, rclass
+syntax varlist, [Keep DENLag Lags(integer 1) Val(integer 100)]
+return local vars "`varlist'"
+return local keep "`keep'"
+return local denlag "`denlag'"
+return scalar lags=`lags'
+return scalar relv=`val'
+if `"`keep'"' == "keep" {
+foreach var of varlist `varlist' {
+capture drop _rel_L`lags'_`var'
+}
+}
+* Define labels
+capture label drop _chglabel
+label define _chglabel ///
+1 "1 positive change " ///
+2 "2 negative change " ///
+3 "3 no change       " ///
+4 "4 abnormal pos chg"  ///
+5 "5 abnormal neg chg"  ///
+6 "6 missing         "
+end
+
+program define calmmvar, rclass
+args i var nn NN dum
+tempvar c1 d1 d2
+qui by `i': gen long `c1'=sum(missing(`var')) if `i'<.
+qui by `i': gen double `d1'=sum(`var')/`nn' if `i'<.
+qui by `i': gen double `d2'=sum(abs(`d1'-`d1'[_N])) if `i'<.
+qui gen byte `dum'=.
+* Singleton
+* 1 - Singleton with nonmissing
+qui replace `dum'=1 if (`NN'==1)&(`c1'==0)
+* 2 - Singleton with missing
+qui replace `dum'=2 if (`NN'==1)&(`c1'==1)
+** Multiple with missing
+* 3 - all missing
+qui replace `dum'=3 if (`NN'>1)&(`c1'==`NN')&(`NN'<.)
+* 4 - Missing with one value!
+qui replace `dum'=4 if (`NN'>1)&(`nn'==`NN')&(`NN'==(`c1'+1))&(`NN'<.)
+* 5 - Non-missing with time-invariant
+qui replace `dum'=5 if (`NN'>1)&(`nn'==`NN')&(`c1'==0)&(`d2'==0)&(`NN'<.)
+* 6 - missing with time-invariant
+qui replace `dum'=6 if (`NN'>1)&(`nn'==`NN')&(`c1'>0)&(`d2'==0)&(`c1'<(`NN'-1))&(`NN'<.)
+* 7 - Non-missing with time-variant
+qui replace `dum'=7 if (`NN'>1)&(`nn'==`NN')&(`c1'==0)&(`d2'>0)&(`NN'<.)
+* 8 - missing with time-variant
+qui replace `dum'=8 if (`NN'>1)&(`nn'==`NN')&(`c1'>0)&(`d2'>0)&(`c1'<(`NN'-1))&(`NN'<.)
+qui count if `dum'==1
+return scalar singnon=r(N)
+qui count if `dum'==2
+return scalar singmis=r(N)
+qui count if `dum'==3
+return scalar allmiss=r(N)
+qui count if `dum'==4
+return scalar oneval=r(N)
+qui count if `dum'==5
+return scalar tinvnon=r(N)
+qui count if `dum'==6
+return scalar tinvmis=r(N)
+qui count if `dum'==7
+return scalar tvarnon=r(N)
+qui count if `dum'==8
+return scalar tvarmis=r(N)
+end
+
+*fromto
+program define check_fromto, rclass
+syntax varlist (min=1 max=1), From(integer) [To(integer 0) Keep Save Missing Descend Ascend]
+return local vars "`varlist'"
+if `to'==0 {
+local to=`from'+1
+}
+return scalar fromval=`from'
+return scalar toval=`to'
+if `to'<=`from' {
+di as error "Error: from value must be lower than to value"
+error 11
+}
+global ps_ftmiss=1
+if `"`missing'"' == "missing" {
+global ps_ftmiss=0
+}
+global ps_ftsave=0
+if `"`save'"' == "save" {
+global ps_ftsave=1
+}
+global ps_ftkeep=0
+if `"`keep'"'=="keep" {
+global ps_ftkeep=1
+}
+global ps_ftasc=0
+if `"`ascend'"'=="ascend" {
+global ps_ftasc=1
+}
+global ps_ftdes=0
+if `"`descend'"'=="descend" {
+global ps_ftdes=1
+}
+end
+
+*returnto
+program define check_return, rclass
+syntax varlist (min=1 max=1), From(integer) [To(integer 0) Middle(integer 0) Keep Save Missing Ascend Descend Within(integer 0)]
+return local vars "`varlist'"
+if `middle'==0 {
+local middle=`from'+1
+}
+if `to'==0 {
+local to=`from'+2
+}
+return scalar val1=`from'
+return scalar val2=`middle'
+return scalar val3=`to'
+if `middle'<=`from' {
+di as error "Error: from value must be lower than middle value"
+error 11
+}
+if `to'<=`middle' {
+di as error "Error: middle value must be lower than to value"
+error 11
+}
+global ps_rtmiss=1
+if `"`missing'"'=="missing" {
+global ps_rtmiss=0
+}
+global ps_rtsave=0
+if `"`save'"'=="save" {
+global ps_rtsave=1
+}
+global ps_rtkeep=0
+if `"`keep'"'=="keep" {
+global ps_rtkeep=1
+}
+global ps_rtwit=`within'
+global ps_rtasc=0
+if `"`ascend'"'=="ascend" {
+global ps_rtasc=1
+}
+global ps_rtdes=0
+if `"`descend'"'=="descend" {
+global ps_rtdes=1
+}
+end
