@@ -8,6 +8,16 @@
 
 net install panelstat, from("https://github.com/pguimaraes99/panelstat/raw/master/")
 
+## User guide
+
+The file `panelstat_UG.stmd` contains a Stata markdown file 
+Use (`markstat`)[https://data.princeton.edu/stata/markdown] to create a user guide for `panelstat`
+After installing the `markstat` ado type
+```
+markstat using panelstat_UG.stmd
+```
+to create an html the user guide.
+
 ## Author
 
 Paulo Guimaraes

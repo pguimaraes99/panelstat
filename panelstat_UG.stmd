@@ -2,8 +2,8 @@
 ---
 title: A user guide for *panelstat*
 author: Paulo Guimaraes, BPlim
-date:  28jun2018
-version: 3.44
+date:  14jun2019
+version: 3.45
 ---
 
 
@@ -123,15 +123,11 @@ The `cont` option should be used if there is a time gap that is common to all pa
 with the heading "Number of individuals per time unit" we see that some years are missing. If you use the `cont` option
 then these years will be ignored in all subsequent calculations. This will make a difference in calculations that make use of lagged values.
 
-## The *forcestata* and *forcesreshape* option
+## The *forcestata* option
 
 Working with large panels can be extremely slow. Fortunately, there are some user-written tools such as
-[`gtools`](http://gtools.readthedocs.io/en/latest/index.html) written by Mauricio Caceres, `fastreshape` by Michael Droste
-and `sreshape` by Kenneth L. Simons. By default `panelstat` will check to see if any of these tools is installed in your machine. If it finds the `gtools`
-package then it will use it. `fastreshape` is also selected by default but if it cannot find it `panelstat` tries to use `sreshape` instead.
-Only if the user-written commands are not found will it resort to using *Stata* official commands. However, you can change the behavior of `panelstat`.
-The option `forcestata` will always use *Stata* official commands while the `forcesreshape` will force the use of `sreshape` even if
-`fastreshape` is installed. Note, however, that the reshape commands are only used with `panelstat`'s options `tabovert` and `pattern`.
+[`gtools`](http://gtools.readthedocs.io/en/latest/index.html) written by Mauricio Caceres that are much faster than official *Stata* commands.
+If `panelstat` finds that the `gtools` package is installed then it will use it. The option `forcestata` will force the use of *Stata* official commands
 
 4 The structure of the panel
 ============================

@@ -1,8 +1,7 @@
-*! version 3.46 27nov2018
+*! version 3.5 14jub2019
 * Programmed by Paulo Guimaraes
 * Dependencies:
 * option checkid requires installation of package group2hdfe (version 1.01 03jul2014)
-* option pattern and tabovert benefit from installation of sreshape or fastreshape
 * panelstat operates faster if gtools command is installed
 
 * Done
@@ -31,8 +30,9 @@
 * option vars was added
 * wiv and wtv match vars (singleton categories added)
 * added zero option for statovert
+* gtools does reshape so drop fastreshape and sreshape
 
-* to do
+* To Do
 * use r(tdelta) instead of "1"
 * delete miscode subcommand?
 * create an option for moregap information (module2a)
@@ -73,7 +73,6 @@ RETURN(string) /// /* Lists all cases where the variable returns to a previous v
 FORCE1 /// /* if there are repeated i by t makes it work by keeping only one i per t */
 FORCE2 /// /* drops all observations with repeated values by i x t */
 FORCE3 /// /* drops all observations for individuals that have repeated values of i x t */
-FORCESRESHAPE /// /* forces the use of sreshape */
 FORCESTATA /// /*forces the use of Stata commands*/
 ALL ///
 ]
@@ -222,6 +221,7 @@ local returnval2=r(val2)
 local returnval3=r(val3)
 }
 
+/*
 * Check if faster user-written ados installed
 * reshape
 *if "`tabovert'"!="" | "`pattern'"!=""  {
@@ -247,6 +247,7 @@ else {
 di "sreshape is not installed"
 }
 }
+*/
 
 * gtools
 capture which gtools
@@ -258,7 +259,7 @@ di "You may want to install user-written GTOOLS for faster results"
 }
 
 if "`forcestata'"=="forcestata" {
-global ps_reshape ""
+*global ps_reshape ""
 global ps_gtools ""
 }
 
@@ -1010,7 +1011,7 @@ sum `t', meanonly
 gen `tt'=`t'-r(min)+1
 local k=r(max)-r(min)+1
 drop `t'
-qui ${ps_reshape}reshape wide _dum, i(`i') j(`tt')
+qui ${ps_gtools}reshape wide _dum, i(`i') j(`tt')
 qui recode _dum1 .=0
 qui gen str Pattern=string(_dum1)
 if `k'>1 {
@@ -1553,7 +1554,7 @@ args t var excel
 preserve
 ${ps_gtools}contract `t' `var'
 rename _freq n
-qui ${ps_reshape}reshape wide n, i(`var') j(`t')
+qui ${ps_gtools}reshape wide n, i(`var') j(`t')
 di
 di "Tabulation of `var' over time"
 list, noobs
@@ -1596,7 +1597,6 @@ if ${ps_ftkeep} {
 tempfile ftkeep
 qui save `ftkeep', replace
 }
-}
 ${ps_gtools}contract `var'* _type
 rename _freq n
 if ${ps_ftmiss} {
@@ -1623,6 +1623,10 @@ qui save fromto_`var'_`fromv'_`tov', replace
 if "`excel'"!="" {
 qui putexcel set "`excel'.xlsx", sheet("fromto_`var'_`fromv'_`tov'") modify
 export excel using "`excel'.xlsx", sheet("fromto_`var'_`fromv'_`tov'") firstrow(variables)
+}
+}
+if r(N)==0 {
+di "Error: There are no valid observations!"
 }
 restore
 
