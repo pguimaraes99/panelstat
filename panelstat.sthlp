@@ -46,7 +46,7 @@ Basic Descriptives
 
 {p 0 4}{opt demog} characterizes the flows of panelvar units that occur between two consecutive time periods: entrants, exiters, incumbents.
 
-{p 0 4}{opt vars} produces a table for all numeric variables in the dataset with information along the panel unit dimension.
+{p 0 4}{opt vars} produces a table for all variables in the dataset with information along the panel unit dimension.
 
 {p 0 4}{opt nosum} does not report summary statistics for the panel
 

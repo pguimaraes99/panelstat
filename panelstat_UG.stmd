@@ -2,8 +2,8 @@
 ---
 title: A user guide for *panelstat*
 author: Paulo Guimaraes, BPlim
-date:  14jun2019
-version: 3.45
+date:  17jun2019
+version: 3.5
 ---
 
 
@@ -40,8 +40,8 @@ To obtain basic descriptive statistics for this panel we can run `panelstat`:
 As a result `panelstat` produced three pieces of information. The first block, under the heading *Basic Descriptives*,
 provides information on the total number of observations, individuals, and the time span of the panel.
 It also tries to give you an idea of how close the panel is to a fully balanced one. Since we have $4,711$ individuals and we
-observe data for a total of 21 years, if we had a fully balanced dataset we would have $4,711 \times 21=98,931$ observations. Since we
-only have $28,534$ observations the level of completeness is $28,534/98,931=28.84\%$.
+have observed data for a total of 21 years, if we had a fully balanced dataset we should have $4,711 \times 21=98,931$ observations. However, 
+we only have $28,534$ observations which gives a level of completeness of $28,534/98,931=28.84\%$.
 
 The second block of information is simply a tabulation of the number of observations per individual. We can immediately see that there
 are 547 individuals with only one observation (these are called *singletons*) and that only 86 individuals are observed for 15 years - the largest
@@ -125,15 +125,21 @@ then these years will be ignored in all subsequent calculations. This will make 
 
 ## The *forcestata* option
 
-Working with large panels can be extremely slow. Fortunately, there are some user-written tools such as
-[`gtools`](http://gtools.readthedocs.io/en/latest/index.html) written by Mauricio Caceres that are much faster than official *Stata* commands.
-If `panelstat` finds that the `gtools` package is installed then it will use it. The option `forcestata` will force the use of *Stata* official commands
+Working with large panels can be extremely slow. Fortunately, there user-written command
+[`gtools`](http://gtools.readthedocs.io/en/latest/index.html) written by Mauricio Caceres is much faster than official *Stata* commands.
+To install an updated version do
+```
+ssc install gtools
+gtools, upgrade
+```
+If `panelstat` finds that the `gtools` package is installed then it will use it. 
+The option `forcestata` will force the use of *Stata* official commands.
 
 4 The structure of the panel
 ============================
 
 There are a set of options that allow us to gain a better understanding of the structure of the panel.
-These are the `pattern`, `gaps`, `runs`,`vars` and `demog` options. In the following, to prevent redisplaying the basic descriptives
+These are the `pattern`, `gaps`, `runs`,`vars`, and `demog` options. In the following, to prevent redisplaying the basic descriptives
 for the panel we will use the `nosum` option.
 
 ## The *pattern* option
@@ -163,12 +169,11 @@ A gap is simply a "hole" in the data. Option `gaps` gives you some ideia about t
 The first table that is produced - *Distribution of the size of the time gaps* - gives an idea of how large these gaps are.
 The most common situation in this data set is a gap of size 1 - which happens 9,757 times. On the other extreme we see that there are
 2 gaps of size 19. Since the maximum time dimension of this panel is 21 years this means that two individuals were observed in the
-first year and again in the last year without having any other observations in between. The second table  - *Distribution of the number of gaps by individual* -
-tells you how many gaps there are per individual. For 984 women there are no gaps  - although some of these women may have been observed
+first year and again in the last year without having any other observations in between. The second table  - *Distribution of the number of gaps by individual* - tells you how many gaps there are per individual. For 984 women there are no gaps - although some of these women may have been observed
 only once - and, out of the 4,711 women, 13 had a total of 8 gaps!
 
 Notice that there are some years (74, 76, 79, 81, 84 and 86) for which we do not have data. Perhaps there was no
-data collected in those years, and so this fact may be "inflating" the actual number of gaps. With the `cont` option we can correct this
+data collected in those particular years, and so this fact may be "inflating" the actual number of gaps. With the `cont` option we can correct this
 by considering all time periods in the panel as consecutive. If we do this we see that the number of gaps is substantially reduced
 ```s
     panelstat idcode year, gaps nosum cont
@@ -185,7 +190,7 @@ As a result the variables *ngap* and *maxgap* are added to the dataset. Note tha
 
 A *run* is a set of consecutive time periods for which a panel unit is observed. If a panel unit has a run of size 3, this means
 that this panel unit was observed for three consecutive time periods. Of course, a panel unit may have several *runs* (which
-meant it also had gaps). Next, we run `panelstat` with the `runs` (as well as the `cont`) option
+means it also has gaps). Next, we run `panelstat` with the `runs` (as well as the `cont`) option
 ```s
     panelstat idcode year, runs nosum cont
 ```
@@ -194,7 +199,7 @@ years for which we do not have any data).
 
 ## The *vars* option
 
-The `vars` option produces a table with information for all numeric variables in your dataset indicating how many panel units
+The `vars` option produces a table with information for all variables in your dataset indicating how many panel units
 fall in each of the following categories
 
   - singleton observation with nonmissing value of the variable
@@ -440,7 +445,7 @@ With this suboption the command will look for cases where $x_{t+1}$ is outside t
 where $a$ is the value used in the argument of the `within` suboption. To illustrate let us check for abnormal changes in wages
 for 72.
 ```s
-panelstat idcode year, nosum return(ln_wage, from(71) within(50))
+    panelstat idcode year, nosum return(ln_wage, from(71) within(50))
 ```
 The above table gives a list of all cases where *ln_wage* in 72 is outside a 50% percent interval constructed around the 71 value
 while the 73 value is within that interval.
@@ -557,6 +562,6 @@ at the Stata prompt.
 6 Acknowledgements
 ===================
 
-I am grateful for all the comments, suggestions, and bug corrections by the BPlim staff,
+I am grateful for all the comments, suggestions, and bug corrections by the BPLIM staff,
 particularly Marta Silva and Emma Zhao. Other researchers, such as Ana Rute Cardoso, have also
 provided valuable suggestions.
