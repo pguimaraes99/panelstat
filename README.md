@@ -26,4 +26,5 @@ Paulo Guimaraes
 
 ## Acknowledgments
 
-This package benefited from many comments by Marta Silva and Emma Zhao.
+This package benefited from many comments by Marta Silva and Emma Zhao and other users.
+
