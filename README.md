@@ -1,13 +1,15 @@
 
 # PANELSTAT: Descriptive statistics for panel data sets
 
+*Please refer to https://github.com/BPLIM/Tools/tree/master/ados/General/panelstat for the most updated version*
+
 `panelstat` is a [Stata](http://www.stata.com/) tool to explore unbalanced panel data sets. The software was developed to explore in detail a panel data set. The options that were added reflect particular needs felt by the restricted group of users at BPlim - the microdata laboratory at the Banco de Portugal - who use it on a regular basis. No attention has been given to formatting of outputs.
 
 ## Install:
 
 `panelstat` is not in SSC. To install run the following in Stata:
 
-net install panelstat, from("https://github.com/pguimaraes99/panelstat/raw/master/")
+et install panelstat, from("https://github.com/BPLIM/Tools/raw/master/ados/General/panelstat/")
 
 ## User guide
 
