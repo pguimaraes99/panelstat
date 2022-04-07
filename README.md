@@ -9,7 +9,7 @@
 
 `panelstat` is not in SSC. To install run the following in Stata:
 
-et install panelstat, from("https://github.com/BPLIM/Tools/raw/master/ados/General/panelstat/")
+net install panelstat, from("https://github.com/BPLIM/Tools/raw/master/ados/General/panelstat/")
 
 ## User guide
 
